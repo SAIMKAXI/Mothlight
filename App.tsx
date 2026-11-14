@@ -11,7 +11,8 @@ import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Reg
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
-import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
+import DateTimePicker from '@expo/ui/community/datetime-picker';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   ArrowLeft, Bell, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
@@ -22,6 +23,8 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getNoteTitle as getTitle, normalizeNotes, type Note } from './src/noteModel';
 import { getReminderNoteId } from './src/notificationRouting';
+import { toggleLinePrefix, insertAtSelection as insertTextAtSelection } from './src/formatting';
+import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
 import {
@@ -58,6 +61,7 @@ import {
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
 const ONBOARDING_KEY = 'mothlight.onboarding.v1';
+const PIN_STORAGE_KEY = 'mothlight.private-pin.v1';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -72,6 +76,8 @@ SplashScreen.setOptions({ duration: 320, fade: true });
 const MAX_CHARS = 6000;
 
 type Settings = { typewriterSound: boolean; haptics: boolean; themeMode: ThemeMode; appLockEnabled: boolean };
+type Attachment = Note['attachments'][number];
+type PinSetupStep = 'create' | 'confirm' | null;
 type IconLike = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type ThemeContextValue = { colors: ThemeColors; styles: ReturnType<typeof makeStyles> };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -161,6 +167,50 @@ function ToggleRow({
   );
 }
 
+function PinKeypad({
+  disabled, onDigit, onBackspace,
+}: {
+  disabled: boolean;
+  onDigit: (digit: string) => void;
+  onBackspace: () => void;
+}) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('PinKeypad must be rendered inside ThemeContext');
+  const { styles } = theme;
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'backspace'];
+  return (
+    <View style={styles.pinKeypad}>
+      {keys.map((key, index) => key === '' ? (
+        <View key={`empty-${index}`} />
+      ) : (
+        <Pressable
+          key={key}
+          disabled={disabled}
+          onPress={() => key === 'backspace' ? onBackspace() : onDigit(key)}
+          accessibilityRole="button"
+          accessibilityLabel={key === 'backspace' ? 'Delete last PIN digit' : `Digit ${key}`}
+          style={({ pressed }) => [styles.pinKey, pressed && styles.pressed, disabled && styles.disabledControl]}
+        >
+          <Text style={styles.pinKeyText}>{key === 'backspace' ? '⌫' : key}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function PinDots({ value }: { value: string }) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('PinDots must be rendered inside ThemeContext');
+  const { styles } = theme;
+  return (
+    <View style={styles.pinDotsRow} accessibilityLabel={`${value.length} of ${PIN_LENGTH} PIN digits entered`}>
+      {Array.from({ length: PIN_LENGTH }, (_, index) => (
+        <View key={index} style={[styles.pinDot, index < value.length && styles.pinDotFilled]} />
+      ))}
+    </View>
+  );
+}
+
 function AppContent() {
   const [fontsLoaded] = useFonts({ CourierPrime_400Regular });
   const insets = useSafeAreaInsets();
@@ -208,6 +258,14 @@ function AppContent() {
   const [shareState, dispatchShare] = useReducer(shareReducer, 'idle');
   const [deleteState, dispatchDelete] = useReducer(deleteReducer, 'idle');
   const [pendingReminderNoteId, setPendingReminderNoteId] = useState<string | null>(null);
+  const [storedPin, setStoredPin] = useState<string | null>(null);
+  const [pinSetupStep, setPinSetupStep] = useState<PinSetupStep>(null);
+  const [pinSetupDraft, setPinSetupDraft] = useState('');
+  const [pinEntry, setPinEntry] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [customReminderDate, setCustomReminderDate] = useState(() => new Date(Date.now() + 60 * 60 * 1000));
+  const [customReminderOpen, setCustomReminderOpen] = useState(false);
 
   const setPanel = (nextPanel: Panel) => {
     if (nextPanel === null) {
@@ -228,9 +286,12 @@ function AppContent() {
     }
   };
   const setScreen = (nextScreen: Screen) => {
-    dispatchNavigation({ type: nextScreen === 'library' ? 'OPEN_LIBRARY' : 'OPEN_EDITOR' });
+    if (nextScreen === 'library') dispatchNavigation({ type: 'OPEN_LIBRARY' });
+    else if (nextScreen === 'settings') dispatchNavigation({ type: 'OPEN_SETTINGS' });
+    else dispatchNavigation({ type: 'OPEN_EDITOR' });
     dispatchSearch({ type: 'CLOSE' });
     dispatchHelper({ type: 'CLOSE' });
+    Keyboard.dismiss();
   };
 
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -244,39 +305,13 @@ function AppContent() {
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const settingsRevisionRef = useRef(0);
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const appLockAttemptedRef = useRef(false);
-  const appLockInFlightRef = useRef(false);
   const appBackgroundAtRef = useRef<number | null>(null);
   const lastNotificationResponseRef = useRef<string | null>(null);
   const strikeValue = useRef(new Animated.Value(0)).current;
+  const bulbGlow = useRef(new Animated.Value(0.24)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
-
-  const authenticateToUnlock = useCallback(async () => {
-    if (appLockInFlightRef.current) return;
-    appLockInFlightRef.current = true;
-    dispatchAppLock({ type: 'AUTH_START' });
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock Mothlight',
-        cancelLabel: 'Not now',
-        fallbackLabel: 'Use device passcode',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        dispatchAppLock({ type: 'AUTH_SUCCESS' });
-      } else {
-        dispatchAppLock({
-          type: 'AUTH_FAILED',
-          reason: result.error === 'user_cancel' ? 'Unlock cancelled.' : 'Authentication was not successful.',
-        });
-      }
-    } catch {
-      dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Device authentication is unavailable.' });
-    } finally {
-      appLockInFlightRef.current = false;
-    }
-  }, []);
+  const returnPlayer = useAudioPlayer(require('./assets/typewriter-return.wav'));
 
   const currentNote = useMemo(
     () => notes.find((note) => note.id === currentNoteId) ?? null,
@@ -295,10 +330,11 @@ function AppContent() {
       let hasExistingNotes = false;
       let onboardingWasComplete = false;
       try {
-        const [rawNotes, rawSettings, rawOnboarding] = await Promise.all([
+        const [rawNotes, rawSettings, rawOnboarding, rawPin] = await Promise.all([
           AsyncStorage.getItem(NOTES_KEY),
           AsyncStorage.getItem(SETTINGS_KEY),
           AsyncStorage.getItem(ONBOARDING_KEY),
+          SecureStore.getItemAsync(PIN_STORAGE_KEY),
         ]);
         if (!active) return;
         hasExistingNotes = Boolean(rawNotes);
@@ -313,25 +349,25 @@ function AppContent() {
             setCurrentNoteId(latest.id);
             source = 'stored';
           } else {
-            const first = makeNote();
-            setNotes([first]);
-            setCurrentNoteId(first.id);
+            setNotes([]);
+            setCurrentNoteId(null);
             source = 'fresh';
           }
         } else {
-          const first = makeNote();
-          setNotes([first]);
-          setCurrentNoteId(first.id);
+          setNotes([]);
+          setCurrentNoteId(null);
           source = 'fresh';
         }
 
+        setStoredPin(rawPin);
         if (rawSettings) {
           const parsedSettings = JSON.parse(rawSettings) as Partial<Settings>;
           const themeMode: ThemeMode =
             parsedSettings.themeMode === 'light' || parsedSettings.themeMode === 'dark'
               ? parsedSettings.themeMode
               : 'system';
-          const appLockEnabled = parsedSettings.appLockEnabled === true;
+          const requestedAppLock = parsedSettings.appLockEnabled === true;
+          const appLockEnabled = requestedAppLock && Boolean(rawPin);
           setSettings({
             typewriterSound: parsedSettings.typewriterSound ?? true,
             haptics: parsedSettings.haptics ?? true,
@@ -339,6 +375,9 @@ function AppContent() {
             appLockEnabled,
           });
           dispatchAppLock({ type: appLockEnabled ? 'STARTUP_LOCK' : 'DISABLE' });
+          if (requestedAppLock && !rawPin) {
+            Alert.alert('PIN setup required', 'The previous biometric lock has been replaced by an in-app PIN. Set a new PIN in Settings.');
+          }
         } else {
           dispatchAppLock({ type: 'DISABLE' });
         }
@@ -425,12 +464,6 @@ function AppContent() {
   }, [panel]);
 
   useEffect(() => {
-    if (!ready || appLockState.status !== 'locked' || appLockAttemptedRef.current) return;
-    appLockAttemptedRef.current = true;
-    void authenticateToUnlock();
-  }, [ready, appLockState.status, authenticateToUnlock]);
-
-  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background' && appBackgroundAtRef.current === null) {
         // iOS may emit "inactive" before "background"; timestamp the actual departure.
@@ -439,7 +472,8 @@ function AppContent() {
       if (nextState === 'active' && appBackgroundAtRef.current !== null) {
         const awayFor = Date.now() - appBackgroundAtRef.current;
         if (settings.appLockEnabled && awayFor >= 3000) {
-          appLockAttemptedRef.current = false;
+          setPinEntry('');
+          setPinError(null);
           Keyboard.dismiss();
           dispatchNavigation({ type: 'CLOSE_PANEL' });
           dispatchSearch({ type: 'CLOSE' });
@@ -471,6 +505,11 @@ function AppContent() {
   useEffect(() => {
     if (typewriterState.phase === 'idle') return;
     const sequence = typewriterState.sequence;
+    bulbGlow.stopAnimation();
+    Animated.sequence([
+      Animated.timing(bulbGlow, { toValue: 1, duration: 26, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(bulbGlow, { toValue: 0.24, duration: 190, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
     if (typewriterState.phase === 'striking' && typewriterState.kind === 'backspace') {
       dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
       return;
@@ -490,11 +529,12 @@ function AppContent() {
         useNativeDriver: true,
       }).start();
     }
-  }, [typewriterState.sequence, typewriterState.phase, strikeValue, carriageX]);
+  }, [typewriterState.sequence, typewriterState.phase, strikeValue, carriageX, bulbGlow]);
 
   useEffect(() => {
-    clickPlayer.volume = 0.14;
-  }, [clickPlayer]);
+    clickPlayer.volume = 0.38;
+    returnPlayer.volume = 0.42;
+  }, [clickPlayer, returnPlayer]);
 
   const updateNote = useCallback((id: string, patch: Partial<Note>) => {
     setNotes((existing) => existing.map((note) =>
