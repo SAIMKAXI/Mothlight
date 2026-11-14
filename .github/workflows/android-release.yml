@@ -68,6 +68,17 @@ jobs:
       - name: Verify Babel preset for release bundling
         run: node -e "require.resolve('babel-preset-expo'); console.log('babel-preset-expo is installed and resolvable')"
 
+      - name: Verify SafeAreaProvider at app root
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const app = fs.readFileSync('App.tsx', 'utf8');
+          if (!app.includes('SafeAreaProvider') || !app.includes('<AppContent />')) {
+            throw new Error('App must wrap AppContent in SafeAreaProvider before useSafeAreaInsets runs.');
+          }
+          console.log('SafeAreaProvider root verified.');
+          NODE
+
       - name: TypeScript checks
         run: npm run typecheck
 
