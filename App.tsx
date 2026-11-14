@@ -1232,6 +1232,13 @@ function AppContent() {
                       onPress={() => applyHelperText(content.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' '))}
                       disabled={!content.trim()}
                     />
+                <PanelAction
+                  icon={List}
+                  title="Turn lines into a list"
+                  detail="Add a quiet bullet to each non-empty line."
+                  onPress={() => applyHelperText(content.split('\n').map((line) => line.trim() ? '· ' + line : line).join('\n'))}
+                  disabled={!content.trim()}
+                />
                 <PanelAction icon={Lightbulb} title="Add a thought-starter" detail="Insert a gentle prompt at the cursor." onPress={() => insertAtSelection('What I want to remember is ')} />
               </ScrollView>
             ) : null}
