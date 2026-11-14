@@ -1225,7 +1225,13 @@ function AppContent() {
             {panel === 'ideas' ? (
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.sheetIntro}>Small local helpers. Your writing stays on this device.</Text>
-                <PanelAction icon={WandSparkles} title="Clean up spacing" detail="Tidy repeated spaces and punctuation." onPress={() => applyHelperText('Clean up spacing', content.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' '))} />                <PanelAction icon={List} title="Turn lines into a list" detail="Add a quiet bullet to each non-empty line." onPress={() => applyHelperText('Turn lines into a list', content.split('\n').map((line) => line.trim() ? '· ' + line : line).join('\n'))} />
+                    <PanelAction
+                      icon={WandSparkles}
+                      title="Clean up spacing"
+                      detail="Tidy repeated spaces and punctuation."
+                      onPress={() => applyHelperText(content.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' '))}
+                      disabled={!content.trim()}
+                    />
                 <PanelAction icon={Lightbulb} title="Add a thought-starter" detail="Insert a gentle prompt at the cursor." onPress={() => insertAtSelection('What I want to remember is ')} />
               </ScrollView>
             ) : null}
