@@ -19,7 +19,7 @@ import {
   Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2, LockKeyhole,
   VolumeX, Vibrate, WandSparkles, X,
 } from 'lucide-react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
 import {
@@ -163,7 +163,7 @@ function ToggleRow({
   );
 }
 
-export default function App() {
+function AppContent() {
   const [fontsLoaded] = useFonts({ CourierPrime_400Regular });
   const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<Note[]>([]);
@@ -1489,4 +1489,13 @@ function makeStyles(colors: ThemeColors) {
   themeOptionTextSelected: { color: colors.accentText, fontWeight: '600' },
   settingsSecurityFootnote: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 9, marginBottom: 4 },
 });
+}
+
+// Safe-area hooks must be rendered beneath this root provider.
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppContent />
+    </SafeAreaProvider>
+  );
 }
