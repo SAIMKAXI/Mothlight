@@ -435,3 +435,92 @@ export function deleteReducer(state: DeleteState, event: DeleteEvent): DeleteSta
       return state;
   }
 }
+
+
+export type OnboardingState =
+  | { status: 'checking' }
+  | { status: 'active'; step: 0 | 1 | 2 }
+  | { status: 'completed' };
+
+export type OnboardingEvent =
+  | { type: 'START' }
+  | { type: 'NEXT' }
+  | { type: 'BACK' }
+  | { type: 'SKIP' }
+  | { type: 'COMPLETE' };
+
+export const initialOnboardingState: OnboardingState = { status: 'checking' };
+
+export function onboardingReducer(
+  state: OnboardingState,
+  event: OnboardingEvent,
+): OnboardingState {
+  switch (event.type) {
+    case 'START':
+      return state.status === 'checking' ? { status: 'active', step: 0 } : state;
+    case 'NEXT':
+      if (state.status !== 'active') return state;
+      return state.step === 2
+        ? { status: 'completed' }
+        : { status: 'active', step: (state.step + 1) as 0 | 1 | 2 };
+    case 'BACK':
+      if (state.status !== 'active') return state;
+      return state.step === 0
+        ? state
+        : { status: 'active', step: (state.step - 1) as 0 | 1 | 2 };
+    case 'SKIP':
+    case 'COMPLETE':
+      return { status: 'completed' };
+    default:
+      return state;
+  }
+}
+
+export type AppLockState =
+  | { status: 'disabled' }
+  | { status: 'locked' }
+  | { status: 'authenticating' }
+  | { status: 'unlocked' }
+  | { status: 'failed'; reason: string };
+
+export type AppLockEvent =
+  | { type: 'ENABLE' }
+  | { type: 'STARTUP_LOCK' }
+  | { type: 'LOCK' }
+  | { type: 'AUTH_START' }
+  | { type: 'AUTH_SUCCESS' }
+  | { type: 'AUTH_FAILED'; reason: string }
+  | { type: 'RETRY' }
+  | { type: 'DISABLE' };
+
+export const initialAppLockState: AppLockState = { status: 'disabled' };
+
+export function appLockReducer(
+  state: AppLockState,
+  event: AppLockEvent,
+): AppLockState {
+  switch (event.type) {
+    case 'ENABLE':
+      return state.status === 'disabled' ? { status: 'unlocked' } : state;
+    case 'STARTUP_LOCK':
+      return state.status === 'disabled' ? { status: 'locked' } : state;
+    case 'LOCK':
+      return state.status === 'disabled' ? state : { status: 'locked' };
+    case 'AUTH_START':
+      return state.status === 'locked' || state.status === 'failed'
+        ? { status: 'authenticating' }
+        : state;
+    case 'AUTH_SUCCESS':
+      return state.status === 'authenticating' ? { status: 'unlocked' } : state;
+    case 'AUTH_FAILED':
+      return state.status === 'authenticating'
+        ? { status: 'failed', reason: event.reason }
+        : state;
+    case 'RETRY':
+      return state.status === 'failed' ? { status: 'locked' } : state;
+    case 'DISABLE':
+      return { status: 'disabled' };
+    default:
+      return state;
+  }
+}
