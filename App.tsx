@@ -142,8 +142,8 @@ export default function App() {
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [strikeTick, setStrikeTick] = useState(0);
 
-  const editorRef = useRef<TextInput>(null);
-  const searchRef = useRef<TextInput>(null);
+  const editorRef = useRef<React.ElementRef<typeof TextInput>>(null);
+  const searchRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const undoStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
   const strikeValue = useRef(new Animated.Value(0)).current;
@@ -284,7 +284,7 @@ export default function App() {
         clickPlayer.play();
       } catch { /* Audio is optional when the device has no output route. */ }
     }
-    if (settings.haptics && kind !== 'none' && kind !== 'paste') {
+    if (settings.haptics) {
       void Haptics.impactAsync(kind === 'return' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
   }, [settings, clickPlayer]);
@@ -550,7 +550,7 @@ export default function App() {
   if (!ready || !fontsLoaded) {
     return (
       <View style={[styles.loading, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="dark-content" backgroundColor={PAPER} />
+        <StatusBar barStyle="dark-content" />
         <Text style={styles.brandWordmark}>mothlight</Text>
         <Text style={styles.loadingCaption}>a quieter place to think</Text>
       </View>
@@ -863,7 +863,7 @@ const styles = StyleSheet.create({
   toolbarEndMark: { width: 22, alignItems: 'center', justifyContent: 'center' },
   toolbarEndDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: SAGE, opacity: 0.85 },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
-  modalScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(35,32,33,0.25)' },
+  modalScrim: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(35,32,33,0.25)' },
   sheet: { backgroundColor: '#E1DEDB', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 22, paddingTop: 9, maxHeight: '72%', borderTopWidth: 1, borderColor: '#B6B0AE' },
   sheetHandle: { alignSelf: 'center', width: 38, height: 4, borderRadius: 3, backgroundColor: '#B3ADAB', marginBottom: 14 },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
