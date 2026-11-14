@@ -50,10 +50,13 @@ jobs:
       - name: Install Android SDK 37 toolchain
         run: |
           sdkmanager --install \
-            "platforms;android-37" \
+            "platforms;android-37.0" \
             "build-tools;37.0.0" \
             "ndk;27.1.12297006" \
             "cmake;3.22.1"
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s android-37.0 "$ANDROID_HOME/platforms/android-37"
+          fi
 
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
