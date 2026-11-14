@@ -14,12 +14,14 @@ import * as Notifications from 'expo-notifications';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SplashScreen from 'expo-splash-screen';
 import {
-  ArrowLeft, Bell, Bold, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
-  Clock3, Copy, FileText, Heading2, ImagePlus, Lightbulb, List, PenLine, Plus, Quote,
+  ArrowLeft, Bell, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
+  Clock3, Copy, FileText, Heading2, ImagePlus, Lightbulb, List, Minus, PenLine, Plus, Quote,
   Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2, LockKeyhole,
   VolumeX, Vibrate, WandSparkles, X,
 } from 'lucide-react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getNoteTitle as getTitle, normalizeNotes, type Note } from './src/noteModel';
+import { getReminderNoteId } from './src/notificationRouting';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
 import {
@@ -57,21 +59,18 @@ const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
 const ONBOARDING_KEY = 'mothlight.onboarding.v1';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 320, fade: true });
 const MAX_CHARS = 6000;
 
-type Attachment = { id: string; uri: string; name: string };
-type Note = {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: number;
-  updatedAt: number;
-  attachments: Attachment[];
-  reminderId?: string;
-  reminderAt?: number;
-};
 type Settings = { typewriterSound: boolean; haptics: boolean; themeMode: ThemeMode; appLockEnabled: boolean };
 type IconLike = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type ThemeContextValue = { colors: ThemeColors; styles: ReturnType<typeof makeStyles> };
@@ -89,15 +88,10 @@ const makeNote = (): Note => {
   };
 };
 
-const getTitle = (note: Note) => {
-  const firstLine = note.content.split('\n').map((line) => line.trim()).find(Boolean);
-  return note.title !== 'Untitled note' ? note.title : (firstLine ? firstLine.slice(0, 42) : 'Untitled note');
-};
-
 function IconButton({
-  icon: Icon, label, onPress, size = 20, active = false,
+  icon: Icon, label, onPress, size = 20, active = false, disabled = false,
 }: {
-  icon: IconLike; label: string; onPress: () => void; size?: number; active?: boolean;
+  icon: IconLike; label: string; onPress: () => void; size?: number; active?: boolean; disabled?: boolean;
 }) {
   const theme = useContext(ThemeContext);
   if (!theme) throw new Error('IconButton must be rendered inside ThemeContext');
@@ -106,9 +100,11 @@ function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       hitSlop={7}
       onPress={onPress}
-      style={({ pressed }) => [styles.toolButton, pressed && styles.pressed, active && styles.toolButtonActive]}
+      style={({ pressed }) => [styles.toolButton, pressed && styles.pressed, active && styles.toolButtonActive, disabled && styles.disabledControl]}
     >
       <Icon size={size} color={active ? colors.accentText : colors.toolbarText} strokeWidth={1.75} />
     </Pressable>
@@ -116,9 +112,9 @@ function IconButton({
 }
 
 function PanelAction({
-  icon: Icon, title, detail, onPress, destructive = false,
+  icon: Icon, title, detail, onPress, destructive = false, disabled = false,
 }: {
-  icon: IconLike; title: string; detail?: string; onPress: () => void; destructive?: boolean;
+  icon: IconLike; title: string; detail?: string; onPress: () => void; destructive?: boolean; disabled?: boolean;
 }) {
   const theme = useContext(ThemeContext);
   if (!theme) throw new Error('PanelAction must be rendered inside ThemeContext');
@@ -126,8 +122,10 @@ function PanelAction({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.panelAction, pressed && styles.panelActionPressed]}
+      disabled={disabled}
+      style={({ pressed }) => [styles.panelAction, pressed && styles.panelActionPressed, disabled && styles.disabledControl]}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
     >
       <View style={[styles.panelIcon, destructive && styles.panelIconDanger]}>
         <Icon size={18} color={destructive ? colors.danger : colors.icon} strokeWidth={1.8} />
@@ -142,15 +140,15 @@ function PanelAction({
 }
 
 function ToggleRow({
-  icon: Icon, title, subtitle, value, onChange,
+  icon: Icon, title, subtitle, value, onChange, disabled = false,
 }: {
-  icon: IconLike; title: string; subtitle: string; value: boolean; onChange: (value: boolean) => void;
+  icon: IconLike; title: string; subtitle: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean;
 }) {
   const theme = useContext(ThemeContext);
   if (!theme) throw new Error('ToggleRow must be rendered inside ThemeContext');
   const { colors, styles } = theme;
   return (
-    <Pressable onPress={() => onChange(!value)} style={styles.toggleRow} accessibilityRole="switch" accessibilityState={{ checked: value }}>
+    <Pressable onPress={() => onChange(!value)} disabled={disabled} style={[styles.toggleRow, disabled && styles.disabledControl]} accessibilityRole="switch" accessibilityState={{ checked: value, disabled }}>
       <View style={styles.panelIcon}><Icon size={18} color={colors.icon} strokeWidth={1.8} /></View>
       <View style={styles.panelActionText}>
         <Text style={styles.panelActionTitle}>{title}</Text>
@@ -209,12 +207,15 @@ function AppContent() {
   const [settingsSaveState, dispatchSettingsSave] = useReducer(saveReducer, initialSaveState);
   const [shareState, dispatchShare] = useReducer(shareReducer, 'idle');
   const [deleteState, dispatchDelete] = useReducer(deleteReducer, 'idle');
+  const [pendingReminderNoteId, setPendingReminderNoteId] = useState<string | null>(null);
 
   const setPanel = (nextPanel: Panel) => {
     if (nextPanel === null) {
+      const wasSearchPanelOpen = panel === 'search';
       dispatchNavigation({ type: 'CLOSE_PANEL' });
       dispatchSearch({ type: 'CLOSE' });
       dispatchHelper({ type: 'CLOSE' });
+      if (wasSearchPanelOpen) setTimeout(() => editorRef.current?.focus(), 220);
       return;
     }
     dispatchNavigation({ type: 'OPEN_PANEL', panel: nextPanel });
@@ -246,6 +247,7 @@ function AppContent() {
   const appLockAttemptedRef = useRef(false);
   const appLockInFlightRef = useRef(false);
   const appBackgroundAtRef = useRef<number | null>(null);
+  const lastNotificationResponseRef = useRef<string | null>(null);
   const strikeValue = useRef(new Animated.Value(0)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
@@ -303,10 +305,11 @@ function AppContent() {
         onboardingWasComplete = rawOnboarding === 'completed' || hasExistingNotes;
 
         if (rawNotes) {
-          const parsed = JSON.parse(rawNotes) as Note[];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setNotes(parsed);
-            const latest = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+          const parsed: unknown = JSON.parse(rawNotes);
+          const normalized = normalizeNotes(parsed);
+          if (normalized && normalized.length > 0) {
+            setNotes(normalized);
+            const latest = [...normalized].sort((a, b) => b.updatedAt - a.updatedAt)[0];
             setCurrentNoteId(latest.id);
             source = 'stored';
           } else {
@@ -416,13 +419,18 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    if (panel !== 'search') return;
+    const timer = setTimeout(() => searchRef.current?.focus(), 220);
+    return () => clearTimeout(timer);
+  }, [panel]);
+
+  useEffect(() => {
     if (!ready || appLockState.status !== 'locked' || appLockAttemptedRef.current) return;
     appLockAttemptedRef.current = true;
     void authenticateToUnlock();
   }, [ready, appLockState.status, authenticateToUnlock]);
 
   useEffect(() => {
-    let previousState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background' && appBackgroundAtRef.current === null) {
         // iOS may emit "inactive" before "background"; timestamp the actual departure.
@@ -440,7 +448,6 @@ function AppContent() {
         }
         appBackgroundAtRef.current = null;
       }
-      previousState = nextState;
     });
     return () => subscription.remove();
   }, [settings.appLockEnabled]);
@@ -796,7 +803,7 @@ function AppContent() {
   };
 
   const findNext = () => {
-    if (!searchText || !currentNote) return;
+    if (!searchText.trim() || !currentNote) return;
     const needle = searchText.toLocaleLowerCase();
     const haystack = content.toLocaleLowerCase();
     const from = selection.end >= content.length ? 0 : Math.max(selection.end, 0);
@@ -810,11 +817,10 @@ function AppContent() {
     dispatchSearch({ type: 'FOUND', query: searchText, start: index, end: index + needle.length });
     const nextSelection = { start: index, end: index + needle.length };
     setSelection(nextSelection);
-    editorRef.current?.focus();
     requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
   };
 
-  const applyHelperText = (_title: string, next: string) => {
+  const applyHelperText = (next: string) => {
     if (!currentNote) return;
     dispatchHistory({ type: 'RECORD', value: content });
     const updated = next.slice(0, MAX_CHARS);
@@ -841,8 +847,12 @@ function AppContent() {
     return sentences.slice(0, 3).join(' ') || content.trim();
   };
 
-  const toolbarActions: { icon: IconLike; label: string; action: () => void }[] = [
-    { icon: ImagePlus, label: 'Add image', action: attachImage },
+  const attachmentBusy = attachmentState.status === 'requesting-permission' ||
+    attachmentState.status === 'picking' || attachmentState.status === 'validating';
+  const reminderBusy = reminderState.status === 'requesting-permission' || reminderState.status === 'scheduling';
+
+  const toolbarActions: { icon: IconLike; label: string; action: () => void; disabled?: boolean }[] = [
+    { icon: ImagePlus, label: 'Add image', action: attachImage, disabled: attachmentBusy },
     { icon: Lightbulb, label: 'Writing suggestions', action: () => { setHelperResult(''); setPanel('ideas'); } },
     { icon: FileText, label: 'Page actions', action: () => setPanel('page') },
     { icon: Search, label: 'Search in note', action: () => { setSearchText(''); setPanel('search'); } },
@@ -867,6 +877,35 @@ function AppContent() {
     setPanel(null);
     setScreen('editor');
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const handleNotificationResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!mounted || !response) return;
+      const responseId = response.notification.request.identifier;
+      if (lastNotificationResponseRef.current === responseId) return;
+      lastNotificationResponseRef.current = responseId;
+      const noteId = getReminderNoteId(response.notification.request.content.data);
+      if (noteId) setPendingReminderNoteId(noteId);
+      void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+    };
+    const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+    void Notifications.getLastNotificationResponseAsync().then(handleNotificationResponse).catch(() => undefined);
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !pendingReminderNoteId) return;
+    if (notes.some((note) => note.id === pendingReminderNoteId)) {
+      openNote(pendingReminderNoteId);
+    } else {
+      Alert.alert('Page unavailable', 'This reminder points to a page that is no longer on this device.');
+    }
+    setPendingReminderNoteId(null);
+  }, [ready, notes, pendingReminderNoteId]);
 
   if (!ready || !fontsLoaded) {
     return (
@@ -1080,7 +1119,7 @@ function AppContent() {
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
             <View style={styles.topRight}>
               <Text style={styles.counter}>{content.length.toLocaleString()} / 6,000</Text>
-              <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} />
+              <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} disabled={shareState === 'opening'} />
             </View>
           </View>
 
@@ -1117,7 +1156,7 @@ function AppContent() {
                   {currentNote.attachments.map((attachment) => (
                     <View key={attachment.id} style={styles.attachmentItem}>
                       <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
-                      <Pressable onPress={() => removeAttachment(attachment.id)} style={styles.attachmentRemove}>
+                      <Pressable onPress={() => removeAttachment(attachment.id)} style={styles.attachmentRemove} accessibilityRole="button" accessibilityLabel={`Remove ${attachment.name}`}>
                         <X size={12} color={colors.toolbarText} />
                       </Pressable>
                     </View>
@@ -1159,7 +1198,7 @@ function AppContent() {
               {toolbarExpanded ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarActions}>
                   {toolbarActions.map((action) => (
-                    <IconButton key={action.label} icon={action.icon} label={action.label} onPress={action.action} />
+                    <IconButton key={action.label} icon={action.icon} label={action.label} onPress={action.action} disabled={action.disabled} />
                   ))}
                 </ScrollView>
               ) : null}
@@ -1214,12 +1253,16 @@ function AppContent() {
                     onSubmitEditing={findNext}
                     autoCorrect={false}
                   />
-                  <Pressable onPress={() => setSearchText('')}><X size={16} color={colors.iconMuted} /></Pressable>
+                  <Pressable onPress={() => setSearchText('')} disabled={!searchText} accessibilityRole="button" accessibilityLabel="Clear search" style={!searchText ? styles.disabledControl : undefined}>
+                    <X size={16} color={colors.iconMuted} />
+                  </Pressable>
                 </View>
-                <Pressable style={styles.primaryPanelButton} onPress={findNext}>
+                <Pressable style={styles.primaryPanelButton} onPress={findNext} disabled={!searchText.trim()} accessibilityRole="button">
                   <Text style={styles.primaryPanelButtonText}>Find next match</Text>
                   <Search size={16} color={colors.inverseText} />
                 </Pressable>
+                {searchState.status === 'found' ? <Text style={styles.sheetIntro}>Match selected. Close this panel to view it in your note.</Text> : null}
+                {searchState.status === 'not-found' ? <Text style={styles.sheetIntro}>No match found. Try another word or phrase.</Text> : null}
               </View>
             ) : null}
 
@@ -1229,11 +1272,15 @@ function AppContent() {
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('· ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')}><Bold size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
                 <View style={styles.undoRow}>
-                  <Pressable style={styles.undoButton} onPress={undo}><Undo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Undo</Text></Pressable>
-                  <Pressable style={styles.undoButton} onPress={redo}><Redo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Redo</Text></Pressable>
+                  <Pressable style={[styles.undoButton, !history.undo.length && styles.disabledControl]} onPress={undo} disabled={!history.undo.length} accessibilityRole="button">
+                    <Undo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Undo</Text>
+                  </Pressable>
+                  <Pressable style={[styles.undoButton, !history.redo.length && styles.disabledControl]} onPress={redo} disabled={!history.redo.length} accessibilityRole="button">
+                    <Redo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Redo</Text>
+                  </Pressable>
                 </View>
               </View>
             ) : null}
@@ -1323,14 +1370,24 @@ function AppContent() {
                   </View>
                 ) : (
                   <View>
-                    <PanelAction icon={PenLine} title="Polish punctuation" detail="Preview a light spacing and punctuation tidy." onPress={polishText} />
-                    <PanelAction icon={FileText} title="Create a short summary" detail="Make a quick excerpt from the opening lines." onPress={() => setHelperResult(smartSummary())} />
-                    <PanelAction icon={List} title="Collect action lines" detail="Find lines with TODO, should, need to or remember." onPress={() => setHelperResult(lineItems().join('\n') || 'No action lines found in this note.')} />
+                    <PanelAction icon={PenLine} title="Polish punctuation" detail="Preview a light spacing and punctuation tidy." onPress={polishText} disabled={!content.trim()} />
+                    <PanelAction icon={FileText} title="Create a short summary" detail="Make a quick excerpt from the opening lines." onPress={() => setHelperResult(smartSummary())} disabled={!content.trim()} />
+                    <PanelAction
+                      icon={List}
+                      title="Collect action lines"
+                      detail="Find lines with TODO, should, need to or remember."
+                      onPress={() => {
+                        const actions = lineItems();
+                        if (actions.length) setHelperResult(actions.join('\n'));
+                        else Alert.alert('No action lines found', 'Add a line containing TODO, need to, should, remember to or action: and try again.');
+                      }}
+                      disabled={!content.trim()}
+                    />
                     <PanelAction icon={Heading2} title="Suggest a title" detail="Use the first meaningful line as the page title." onPress={() => {
                       const firstLine = content.split('\n').map((line) => line.trim()).find(Boolean);
-                      if (firstLine) updateNote(currentNote!.id, { title: firstLine.slice(0, 42) });
+                      if (firstLine && currentNote) updateNote(currentNote.id, { title: firstLine.slice(0, 42) });
                       setPanel(null);
-                    }} />
+                    }} disabled={!content.trim()} />
                   </View>
                 )}
               </View>
@@ -1356,6 +1413,7 @@ function makeStyles(colors: ThemeColors) {
   counter: { color: colors.secondaryText, fontSize: 11, letterSpacing: 1.1, fontVariant: ['tabular-nums'] },
   toolButton: { width: 32, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
   toolButtonActive: { backgroundColor: colors.accent },
+  disabledControl: { opacity: 0.42 },
   pressed: { transform: [{ scale: 0.92 }], opacity: 0.78 },
   paperStage: { flex: 1, position: 'relative', backgroundColor: colors.background, overflow: 'hidden' },
   editorInput: {
