@@ -250,6 +250,32 @@ export default function App() {
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
 
+  const authenticateToUnlock = useCallback(async () => {
+    if (appLockInFlightRef.current) return;
+    appLockInFlightRef.current = true;
+    dispatchAppLock({ type: 'AUTH_START' });
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock Mothlight',
+        cancelLabel: 'Not now',
+        fallbackLabel: 'Use device passcode',
+        disableDeviceFallback: false,
+      });
+      if (result.success) {
+        dispatchAppLock({ type: 'AUTH_SUCCESS' });
+      } else {
+        dispatchAppLock({
+          type: 'AUTH_FAILED',
+          reason: result.error === 'user_cancel' ? 'Unlock cancelled.' : 'Authentication was not successful.',
+        });
+      }
+    } catch {
+      dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Device authentication is unavailable.' });
+    } finally {
+      appLockInFlightRef.current = false;
+    }
+  }, []);
+
   const currentNote = useMemo(
     () => notes.find((note) => note.id === currentNoteId) ?? null,
     [notes, currentNoteId],
@@ -390,6 +416,35 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!ready || appLockState.status !== 'locked' || appLockAttemptedRef.current) return;
+    appLockAttemptedRef.current = true;
+    void authenticateToUnlock();
+  }, [ready, appLockState.status, authenticateToUnlock]);
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (previousState === 'active' && nextState === 'background') {
+        appBackgroundAtRef.current = Date.now();
+      }
+      if (nextState === 'active' && appBackgroundAtRef.current !== null) {
+        const awayFor = Date.now() - appBackgroundAtRef.current;
+        if (settings.appLockEnabled && awayFor >= 3000) {
+          appLockAttemptedRef.current = false;
+          Keyboard.dismiss();
+          dispatchNavigation({ type: 'CLOSE_PANEL' });
+          dispatchSearch({ type: 'CLOSE' });
+          dispatchHelper({ type: 'CLOSE' });
+          dispatchAppLock({ type: 'LOCK' });
+        }
+        appBackgroundAtRef.current = null;
+      }
+      previousState = nextState;
+    });
+    return () => subscription.remove();
+  }, [settings.appLockEnabled]);
+
+  useEffect(() => {
     if (screen !== 'editor' || !ready || !currentNote) return;
     const timer = setTimeout(() => editorRef.current?.focus(), 420);
     return () => clearTimeout(timer);
@@ -480,6 +535,53 @@ export default function App() {
   }, [currentNote, playMechanical, updateNote]);
 
   const setSettingsValue = (patch: Partial<Settings>) => setSettings((old) => ({ ...old, ...patch }));
+
+  const setAppLockEnabled = async (enabled: boolean) => {
+    if (!enabled) {
+      setSettingsValue({ appLockEnabled: false });
+      dispatchAppLock({ type: 'DISABLE' });
+      appLockAttemptedRef.current = false;
+      return;
+    }
+    try {
+      const level = await LocalAuthentication.getEnrolledLevelAsync();
+      if (level === LocalAuthentication.SecurityLevel.NONE) {
+        Alert.alert(
+          'Set up device security first',
+          'Mothlight uses your device passcode, pattern, fingerprint, or Face ID. Set one up in system settings before enabling the app lock.',
+        );
+        return;
+      }
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Confirm to enable Mothlight lock',
+        cancelLabel: 'Cancel',
+        fallbackLabel: 'Use device passcode',
+        disableDeviceFallback: false,
+      });
+      if (!result.success) {
+        Alert.alert('App lock not enabled', 'Your device could not confirm your identity.');
+        return;
+      }
+      setSettingsValue({ appLockEnabled: true });
+      dispatchAppLock({ type: 'ENABLE' });
+    } catch {
+      Alert.alert('App lock unavailable', 'Mothlight could not access device authentication.');
+    }
+  };
+
+  const retryUnlock = () => {
+    appLockAttemptedRef.current = false;
+    dispatchAppLock({ type: 'RETRY' });
+  };
+
+  const completeOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_KEY, 'completed');
+    } catch {
+      Alert.alert('Onboarding preference not saved', 'You can still continue using Mothlight.');
+    }
+    dispatchOnboarding({ type: 'COMPLETE' });
+  };
 
   const shareNote = async () => {
     if (!currentNote || shareState === 'opening') return;
