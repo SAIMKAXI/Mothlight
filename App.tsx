@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  Alert, Animated, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
+  Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
   Platform, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput,
-  View,
+  View, useColorScheme,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer } from 'expo-audio';
@@ -11,14 +11,17 @@ import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Reg
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SplashScreen from 'expo-splash-screen';
 import {
   ArrowLeft, Bell, Bold, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
   Clock3, Copy, FileText, Heading2, ImagePlus, Lightbulb, List, PenLine, Plus, Quote,
-  Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2,
+  Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2, LockKeyhole,
   VolumeX, Vibrate, WandSparkles, X,
 } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
+import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
 import {
   attachmentReducer,
   bootReducer,
@@ -42,19 +45,21 @@ import {
   shareReducer,
   deleteReducer,
   toolbarReducer,
+  onboardingReducer,
+  appLockReducer,
+  initialOnboardingState,
+  initialAppLockState,
   type Panel,
   type Screen,
 } from './src/stateMachines';
 
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
+const ONBOARDING_KEY = 'mothlight.onboarding.v1';
+
+SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 320, fade: true });
 const MAX_CHARS = 6000;
-const PAPER = '#D4D0CD';
-const INK = '#29272A';
-const MUTED = '#777277';
-const SAGE = '#C2D3A9';
-const TOOL = '#777477';
-const BORDER = '#AAA5A6';
 
 type Attachment = { id: string; uri: string; name: string };
 type Note = {
@@ -67,8 +72,10 @@ type Note = {
   reminderId?: string;
   reminderAt?: number;
 };
-type Settings = { typewriterSound: boolean; haptics: boolean };
+type Settings = { typewriterSound: boolean; haptics: boolean; themeMode: ThemeMode; appLockEnabled: boolean };
 type IconLike = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+type ThemeContextValue = { colors: ThemeColors; styles: ReturnType<typeof makeStyles> };
+const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const makeNote = (): Note => {
   const now = Date.now();
@@ -92,6 +99,9 @@ function IconButton({
 }: {
   icon: IconLike; label: string; onPress: () => void; size?: number; active?: boolean;
 }) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('IconButton must be rendered inside ThemeContext');
+  const { colors, styles } = theme;
   return (
     <Pressable
       accessibilityRole="button"
@@ -100,7 +110,7 @@ function IconButton({
       onPress={onPress}
       style={({ pressed }) => [styles.toolButton, pressed && styles.pressed, active && styles.toolButtonActive]}
     >
-      <Icon size={size} color={active ? INK : '#E9E7E4'} strokeWidth={1.75} />
+      <Icon size={size} color={active ? colors.accentText : colors.toolbarText} strokeWidth={1.75} />
     </Pressable>
   );
 }
@@ -110,6 +120,9 @@ function PanelAction({
 }: {
   icon: IconLike; title: string; detail?: string; onPress: () => void; destructive?: boolean;
 }) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('PanelAction must be rendered inside ThemeContext');
+  const { colors, styles } = theme;
   return (
     <Pressable
       onPress={onPress}
@@ -117,13 +130,13 @@ function PanelAction({
       accessibilityRole="button"
     >
       <View style={[styles.panelIcon, destructive && styles.panelIconDanger]}>
-        <Icon size={18} color={destructive ? '#A36E67' : '#5C6658'} strokeWidth={1.8} />
+        <Icon size={18} color={destructive ? colors.danger : colors.icon} strokeWidth={1.8} />
       </View>
       <View style={styles.panelActionText}>
-        <Text style={[styles.panelActionTitle, destructive && { color: '#A36E67' }]}>{title}</Text>
+        <Text style={[styles.panelActionTitle, destructive && { color: colors.danger }]}>{title}</Text>
         {detail ? <Text style={styles.panelActionDetail}>{detail}</Text> : null}
       </View>
-      <ChevronRight size={16} color="#918C8C" />
+      <ChevronRight size={16} color={colors.iconMuted} />
     </Pressable>
   );
 }
@@ -133,9 +146,12 @@ function ToggleRow({
 }: {
   icon: IconLike; title: string; subtitle: string; value: boolean; onChange: (value: boolean) => void;
 }) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('ToggleRow must be rendered inside ThemeContext');
+  const { colors, styles } = theme;
   return (
     <Pressable onPress={() => onChange(!value)} style={styles.toggleRow} accessibilityRole="switch" accessibilityState={{ checked: value }}>
-      <View style={styles.panelIcon}><Icon size={18} color="#5C6658" strokeWidth={1.8} /></View>
+      <View style={styles.panelIcon}><Icon size={18} color={colors.icon} strokeWidth={1.8} /></View>
       <View style={styles.panelActionText}>
         <Text style={styles.panelActionTitle}>{title}</Text>
         <Text style={styles.panelActionDetail}>{subtitle}</Text>
