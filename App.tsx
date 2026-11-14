@@ -612,7 +612,7 @@ export default function App() {
           <View style={styles.topBar}>
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
             <View style={styles.topRight}>
-              <Text style={styles.counter}>{content.length.toLocaleString()} / 3,000</Text>
+              <Text style={styles.counter}>{content.length.toLocaleString()} / 6,000</Text>
               <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} />
             </View>
           </View>
