@@ -1210,7 +1210,7 @@ export default function App() {
                     onSubmitEditing={findNext}
                     autoCorrect={false}
                   />
-                  <Pressable onPress={() => setSearchText('')}><X size={16} color="#777277" /></Pressable>
+                  <Pressable onPress={() => setSearchText('')}><X size={16} color={colors.iconMuted} /></Pressable>
                 </View>
                 <Pressable style={styles.primaryPanelButton} onPress={findNext}>
                   <Text style={styles.primaryPanelButtonText}>Find next match</Text>
@@ -1483,5 +1483,6 @@ function makeStyles(colors: ThemeColors) {
   themeOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   themeOptionText: { color: colors.secondaryText, fontSize: 11 },
   themeOptionTextSelected: { color: colors.accentText, fontWeight: '600' },
+  settingsSecurityFootnote: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 9, marginBottom: 4 },
 });
 }
