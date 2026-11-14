@@ -1069,7 +1069,7 @@ export default function App() {
   return (
     <ThemeContext.Provider value={themeContextValue}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView style={styles.keyboardShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.appFrame}>
           <View style={styles.topBar}>
