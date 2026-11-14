@@ -264,12 +264,18 @@ export default function App() {
     let active = true;
     const load = async () => {
       let source: 'stored' | 'fresh' | 'recovered' = 'fresh';
+      let hasExistingNotes = false;
+      let onboardingWasComplete = false;
       try {
-        const [rawNotes, rawSettings] = await Promise.all([
+        const [rawNotes, rawSettings, rawOnboarding] = await Promise.all([
           AsyncStorage.getItem(NOTES_KEY),
           AsyncStorage.getItem(SETTINGS_KEY),
+          AsyncStorage.getItem(ONBOARDING_KEY),
         ]);
         if (!active) return;
+        hasExistingNotes = Boolean(rawNotes);
+        onboardingWasComplete = rawOnboarding === 'completed' || hasExistingNotes;
+
         if (rawNotes) {
           const parsed = JSON.parse(rawNotes) as Note[];
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -289,12 +295,23 @@ export default function App() {
           setCurrentNoteId(first.id);
           source = 'fresh';
         }
+
         if (rawSettings) {
           const parsedSettings = JSON.parse(rawSettings) as Partial<Settings>;
+          const themeMode: ThemeMode =
+            parsedSettings.themeMode === 'light' || parsedSettings.themeMode === 'dark'
+              ? parsedSettings.themeMode
+              : 'system';
+          const appLockEnabled = parsedSettings.appLockEnabled === true;
           setSettings({
             typewriterSound: parsedSettings.typewriterSound ?? true,
             haptics: parsedSettings.haptics ?? true,
+            themeMode,
+            appLockEnabled,
           });
+          dispatchAppLock({ type: appLockEnabled ? 'STARTUP_LOCK' : 'DISABLE' });
+        } else {
+          dispatchAppLock({ type: 'DISABLE' });
         }
       } catch {
         const first = makeNote();
@@ -302,9 +319,20 @@ export default function App() {
         if (active) {
           setNotes([first]);
           setCurrentNoteId(first.id);
+          dispatchAppLock({ type: 'DISABLE' });
         }
       } finally {
-        if (active) dispatchBoot({ type: 'HYDRATED', source });
+        if (active) {
+          if (onboardingWasComplete) {
+            dispatchOnboarding({ type: 'COMPLETE' });
+            if (hasExistingNotes) {
+              void AsyncStorage.setItem(ONBOARDING_KEY, 'completed').catch(() => undefined);
+            }
+          } else {
+            dispatchOnboarding({ type: 'START' });
+          }
+          dispatchBoot({ type: 'HYDRATED', source });
+        }
       }
     };
     void load();
@@ -312,7 +340,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (ready && fontsLoaded) SplashScreen.hide();
+  }, [ready, fontsLoaded]);
+
+  useEffect(() => {
+    if (!ready || onboardingState.status !== 'completed') return;
     const revision = ++saveRevisionRef.current;
     const snapshot = JSON.stringify(notes);
     dispatchSave({ type: 'DIRTY', revision });
@@ -331,7 +363,7 @@ export default function App() {
         });
     }, 420);
     return () => clearTimeout(timer);
-  }, [notes, ready]);
+  }, [notes, ready, onboardingState.status]);
 
   useEffect(() => {
     if (!ready) return;
