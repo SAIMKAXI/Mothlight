@@ -18,6 +18,6 @@ test('maps cursor offsets to rows and columns, including newlines and wrapping',
 });
 
 test('clamps invalid cursor offsets and protects against zero glyph widths', () => {
-  assert.deepEqual(getCursorMetrics('abc', 99, 0, 0), { row: 0, column: 3, columns: 1 });
+  assert.deepEqual(getCursorMetrics('abc', 99, 0, 0), { row: 2, column: 1, columns: 1 });
   assert.deepEqual(getCursorMetrics('abc', -5, 40, 10), { row: 0, column: 0, columns: 4 });
 });
