@@ -65,6 +65,9 @@ jobs:
       - name: Validate Expo dependencies
         run: npx expo install --check
 
+      - name: Verify Babel preset for release bundling
+        run: node -e "require.resolve('babel-preset-expo'); console.log('babel-preset-expo is installed and resolvable')"
+
       - name: TypeScript checks
         run: npm run typecheck
 
