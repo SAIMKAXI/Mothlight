@@ -871,6 +871,46 @@ function AppContent() {
     focusEditorAt(result.selection);
   };
 
+  const undo = () => {
+    if (!currentNote || !history.undo.length) return;
+    const target = history.undo[history.undo.length - 1];
+    dispatchHistory({ type: 'UNDO', current: content });
+    updateNote(currentNote.id, { content: target });
+    const caret = Math.min(selection.start, target.length);
+    const nextSelection = { start: caret, end: caret };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
+  };
+
+  const redo = () => {
+    if (!currentNote || !history.redo.length) return;
+    const target = history.redo[history.redo.length - 1];
+    dispatchHistory({ type: 'REDO', current: content });
+    updateNote(currentNote.id, { content: target });
+    const caret = Math.min(selection.start, target.length);
+    const nextSelection = { start: caret, end: caret };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
+  };
+
+  const findNext = () => {
+    if (!searchText.trim() || !currentNote) return;
+    const needle = searchText.toLocaleLowerCase();
+    const haystack = content.toLocaleLowerCase();
+    const from = selection.end >= content.length ? 0 : Math.max(selection.end, 0);
+    let index = haystack.indexOf(needle, from);
+    if (index < 0) index = haystack.indexOf(needle, 0);
+    if (index < 0) {
+      dispatchSearch({ type: 'NOT_FOUND', query: searchText });
+      Alert.alert('No match found', 'That phrase is not in this note.');
+      return;
+    }
+    dispatchSearch({ type: 'FOUND', query: searchText, start: index, end: index + needle.length });
+    const nextSelection = { start: index, end: index + needle.length };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
+  };
+
   const applyHelperText = (next: string) => {
     if (!currentNote) return;
     dispatchHistory({ type: 'RECORD', value: content });
