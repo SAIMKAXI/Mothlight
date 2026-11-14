@@ -866,11 +866,154 @@ export default function App() {
 
   if (!ready || !fontsLoaded) {
     return (
-      <View style={[styles.loading, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="dark-content" />
-        <Text style={styles.brandWordmark}>mothlight</Text>
-        <Text style={styles.loadingCaption}>a quieter place to think</Text>
-      </View>
+      <ThemeContext.Provider value={themeContextValue}>
+        <View style={[styles.loading, { paddingTop: insets.top }]}>
+          <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <Image
+            source={resolvedTheme === 'dark'
+              ? require('./assets/mothlight-icon-dark.png')
+              : require('./assets/mothlight-icon.png')}
+            style={styles.loadingLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.brandWordmark}>mothlight</Text>
+          <Text style={styles.loadingCaption}>a quieter place to think</Text>
+        </View>
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (settings.appLockEnabled && appLockState.status !== 'unlocked') {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <View style={styles.lockScreen}>
+            <Image
+              source={resolvedTheme === 'dark'
+                ? require('./assets/mothlight-icon-dark.png')
+                : require('./assets/mothlight-icon.png')}
+              style={styles.lockLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.brandWordmark}>mothlight</Text>
+            <Text style={styles.lockTitle}>Your quiet space, kept private.</Text>
+            <Text style={styles.lockSubtitle}>
+              Unlock with the security already set up on this device.
+            </Text>
+            {appLockState.status === 'failed' ? (
+              <Text style={styles.lockError}>{appLockState.reason}</Text>
+            ) : null}
+            <Pressable
+              style={[styles.lockButton, appLockState.status === 'authenticating' && styles.lockButtonDisabled]}
+              disabled={appLockState.status === 'authenticating'}
+              onPress={retryUnlock}
+            >
+              <LockKeyhole size={17} color={colors.inverseText} />
+              <Text style={styles.lockButtonText}>
+                {appLockState.status === 'authenticating' ? 'Authenticating…' : 'Unlock Mothlight'}
+              </Text>
+            </Pressable>
+            <Text style={styles.lockFootnote}>Uses Face ID, fingerprint, or your device passcode.</Text>
+          </View>
+        </SafeAreaView>
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (onboardingState.status === 'active') {
+    const step = onboardingState.step;
+    const titles = [
+      'A quieter place to think.',
+      'A place for the little things.',
+      'Make it feel like yours.',
+    ];
+    const descriptions = [
+      'A clean sheet, a little room, and a typewriter’s rhythm. Mothlight gives unfinished thoughts somewhere to land.',
+      'Keep the details close. Search your notes, attach images, and set gentle reminders for thoughts worth returning to.',
+      'Choose the light that suits you. You can switch appearance any time, and add an optional device lock in Settings.',
+    ];
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <View style={styles.onboardingRoot}>
+            <View style={styles.onboardingTop}>
+              <Text style={styles.onboardingKicker}>MOTHLIGHT · A QUIETER PLACE TO THINK</Text>
+              <Pressable onPress={() => void completeOnboarding()} hitSlop={10}>
+                <Text style={styles.onboardingSkip}>Skip</Text>
+              </Pressable>
+            </View>
+            <View style={styles.onboardingHero}>
+              <Image
+                source={resolvedTheme === 'dark'
+                  ? require('./assets/mothlight-icon-dark.png')
+                  : require('./assets/mothlight-icon.png')}
+                style={styles.onboardingLogo}
+                resizeMode="contain"
+              />
+              <View style={styles.onboardingProgress}>
+                {[0, 1, 2].map((index) => (
+                  <View
+                    key={index}
+                    style={[styles.onboardingProgressDot, index === step && styles.onboardingProgressDotActive]}
+                  />
+                ))}
+              </View>
+            </View>
+            <View style={styles.onboardingCopy}>
+              <Text style={styles.onboardingStep}>0{step + 1} / 03</Text>
+              <Text style={styles.onboardingTitle}>{titles[step]}</Text>
+              <Text style={styles.onboardingBody}>{descriptions[step]}</Text>
+              {step === 2 ? (
+                <View style={styles.appearancePicker}>
+                  <Text style={styles.appearancePickerTitle}>APPEARANCE</Text>
+                  <View style={styles.appearanceOptions}>
+                    {([
+                      { value: 'system', label: 'System' },
+                      { value: 'light', label: 'Light' },
+                      { value: 'dark', label: 'Dark' },
+                    ] as const).map((option) => (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setSettingsValue({ themeMode: option.value })}
+                        style={[
+                          styles.appearanceOption,
+                          settings.themeMode === option.value && styles.appearanceOptionSelected,
+                        ]}
+                      >
+                        <Text style={[
+                          styles.appearanceOptionText,
+                          settings.themeMode === option.value && styles.appearanceOptionTextSelected,
+                        ]}>{option.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+              <View style={styles.onboardingActions}>
+                {step > 0 ? (
+                  <Pressable style={styles.onboardingBack} onPress={() => dispatchOnboarding({ type: 'BACK' })}>
+                    <Text style={styles.onboardingBackText}>Back</Text>
+                  </Pressable>
+                ) : <View style={styles.onboardingBackPlaceholder} />}
+                <Pressable
+                  style={styles.onboardingNext}
+                  onPress={() => step === 2 ? void completeOnboarding() : dispatchOnboarding({ type: 'NEXT' })}
+                >
+                  <Text style={styles.onboardingNextText}>{step === 2 ? 'Begin writing' : 'Continue'}</Text>
+                  <ChevronRight size={17} color={colors.accentText} />
+                </Pressable>
+              </View>
+              {step === 2 ? (
+                <Text style={styles.onboardingPrivacy}>
+                  App lock is optional and uses your device authentication. Your notes stay on this device.
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </SafeAreaView>
+      </ThemeContext.Provider>
     );
   }
 
