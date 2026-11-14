@@ -4,6 +4,8 @@ import {
   attachmentReducer,
   bootReducer,
   helperReducer,
+  keyboardReducer,
+  toolbarReducer,
   historyReducer,
   initialAttachmentState,
   initialBootState,
@@ -30,6 +32,16 @@ test('navigation never leaves a panel open behind the library', () => {
     navigationReducer(library, { type: 'OPEN_PANEL', panel: 'search' }),
     library,
   );
+});
+
+test('keyboard visibility follows native show and hide events', () => {
+  assert.equal(keyboardReducer('hidden', { type: 'SHOW' }), 'visible');
+  assert.equal(keyboardReducer('visible', { type: 'HIDE' }), 'hidden');
+});
+
+test('toolbar has only expanded and collapsed states', () => {
+  assert.equal(toolbarReducer('expanded', { type: 'TOGGLE' }), 'collapsed');
+  assert.equal(toolbarReducer('collapsed', { type: 'TOGGLE' }), 'expanded');
 });
 
 test('hydration has one explicit terminal transition', () => {
