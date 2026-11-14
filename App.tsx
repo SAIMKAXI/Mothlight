@@ -1029,7 +1029,7 @@ export default function App() {
               <Text style={styles.librarySubtitle}>A quieter place to think.</Text>
             </View>
             <Pressable onPress={createNote} style={styles.newNoteButton}>
-              <Plus size={18} color={INK} strokeWidth={1.8} />
+              <Plus size={18} color={colors.text} strokeWidth={1.8} />
               <Text style={styles.newNoteLabel}>New note</Text>
             </Pressable>
           </View>
