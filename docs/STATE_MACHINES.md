@@ -16,7 +16,9 @@ The UI is rendered in `App.tsx`; pure state transitions live in `src/stateMachin
 | Attachment | `idle → requesting-permission → picking → validating → attached` | permission, picker, validation, and completion events |
 | Reminder | `idle → requesting-permission → scheduling → scheduled` | permission and scheduling events |
 | Search | `closed / editing / found / not-found` | `OPEN`, `QUERY_CHANGED`, `FOUND`, `NOT_FOUND`, `CLOSE` |
-| Writing helper | `closed / ready(ideas or smart) / preview` | `OPEN`, `PREVIEW`, `DISCARD`, `APPLY`, `CLOSE` |
+| Writing helper | `closed / ready(ideas or smart) / preview` |
+| Sharing | `idle / opening / shared / dismissed / failed` |
+| Delete confirmation | `idle / confirming / deleting` | `OPEN`, `PREVIEW`, `DISCARD`, `APPLY`, `CLOSE` |
 
 ## Transition diagrams
 
@@ -99,6 +101,8 @@ Only one attachment picker or reminder scheduling operation can be active at a t
 6. Attachments and reminders must pass permission and intermediate states before reaching success.
 7. Search and helper results are represented as typed states rather than empty-string sentinels.
 8. Platform side effects remain outside reducers, keeping transitions pure and independently testable.
+9. Sharing only resolves from the opening state; deletion cannot proceed until confirmation is received.
+10. Settings use the same revisioned save machine as notes, with serialized AsyncStorage writes.
 
 ## Verification
 
