@@ -4,7 +4,6 @@ export type ResolvedTheme = Exclude<ThemeMode, 'system'>;
 export type ThemeColors = {
   background: string;
   surface: string;
-  paperStage: string;
   text: string;
   muted: string;
   secondaryText: string;
@@ -13,12 +12,10 @@ export type ThemeColors = {
   border: string;
   accent: string;
   accentText: string;
-  accentSoft: string;
   card: string;
   cardBorder: string;
   input: string;
   danger: string;
-  dangerBackground: string;
   rail: string;
   railHighlight: string;
   carriage: string;
@@ -44,7 +41,6 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
   light: {
     background: '#D4D0CD',
     surface: '#E1DEDB',
-    paperStage: '#D4D0CD',
     text: '#29272A',
     muted: '#777277',
     secondaryText: '#5F5B5E',
@@ -53,12 +49,10 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
     border: '#AAA5A6',
     accent: '#C2D3A9',
     accentText: '#29272A',
-    accentSoft: '#D3DEC4',
     card: '#D2D0C9',
     cardBorder: '#B8B4B1',
     input: '#CFCCCA',
     danger: '#A36E67',
-    dangerBackground: '#E5D3CF',
     rail: '#494649',
     railHighlight: '#AAA4A2',
     carriage: '#999494',
@@ -82,7 +76,6 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
   dark: {
     background: '#1D2121',
     surface: '#272C2B',
-    paperStage: '#222626',
     text: '#EEE8DC',
     muted: '#AAA7A0',
     secondaryText: '#C7C2B8',
@@ -91,12 +84,10 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
     border: '#4B514D',
     accent: '#A9C08F',
     accentText: '#202522',
-    accentSoft: '#394637',
     card: '#303635',
     cardBorder: '#4A514E',
     input: '#2D3331',
     danger: '#E0A097',
-    dangerBackground: '#493331',
     rail: '#0D1111',
     railHighlight: '#6B716B',
     carriage: '#4C514D',
