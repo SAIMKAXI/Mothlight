@@ -1238,7 +1238,7 @@ export default function App() {
             ) : null}
 
             {panel === 'settings' ? (
-              <View>
+              <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.settingsSection}>Appearance</Text>
                 <View style={styles.themeOptions}>
                   {([
@@ -1289,7 +1289,7 @@ export default function App() {
                 <Text style={styles.settingsSecurityFootnote}>
                   App lock gates access to the app; it does not encrypt notes stored on this device.
                 </Text>
-              </View>
+              </ScrollView>
             ) : null}
 
             {panel === 'reminder' ? (
