@@ -926,7 +926,13 @@ export default function App() {
               <View>
                 <ToggleRow icon={settings.typewriterSound ? Volume2 : VolumeX} title="Typewriter sounds" subtitle="Soft mechanical clicks while you write." value={settings.typewriterSound} onChange={(value) => setSettingsValue({ typewriterSound: value })} />
                 <ToggleRow icon={Vibrate} title="System haptics" subtitle="Use gentle native touch feedback." value={settings.haptics} onChange={(value) => setSettingsValue({ haptics: value })} />
-                <Text style={styles.settingsFootnote}>Keyboard layout, language, dictation and autocorrect are provided by your operating system.</Text>
+                <Text style={styles.settingsFootnote}>
+                  {settingsSaveState.status === 'error'
+                    ? 'Your preferences could not be saved. They may reset when the app closes.'
+                    : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
+                      ? 'Saving your preferences...'
+                      : 'Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
+                </Text>
               </View>
             ) : null}
 
