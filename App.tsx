@@ -22,7 +22,7 @@ import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
-const MAX_CHARS = 3000;
+const MAX_CHARS = 6000;
 const PAPER = '#D4D0CD';
 const INK = '#29272A';
 const MUTED = '#777277';
@@ -612,7 +612,7 @@ export default function App() {
           <View style={styles.topBar}>
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
             <View style={styles.topRight}>
-              <Text style={styles.counter}>{content.length.toLocaleString()} / 3,000</Text>
+              <Text style={styles.counter}>{content.length.toLocaleString()} / 6,000</Text>
               <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} />
             </View>
           </View>
