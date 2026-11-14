@@ -9,6 +9,7 @@ on:
       - "package.json"
       - "src/**"
       - "assets/**"
+      - "scripts/**"
       - "babel.config.js"
       - "tsconfig.json"
       - ".github/workflows/android-release.yml"
@@ -86,42 +87,10 @@ jobs:
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Normalize Mothlight PNG assets
+      - name: Generate Mothlight brand assets
         run: |
           python -m pip install --disable-pip-version-check --quiet pillow
-          python - <<'PY'
-          from pathlib import Path
-          from PIL import Image
-
-          light_path = Path("assets/mothlight-icon.png")
-          dark_path = Path("assets/mothlight-icon-dark.png")
-
-          light = Image.open(light_path).convert("RGB")
-          light.save(light_path, format="PNG", optimize=True)
-
-          # Recreate the dark variant from the same artwork, changing only
-          # the paper background and outline neutrals for contrast.
-          dark = light.copy()
-          pixels = dark.load()
-          recolor = {
-              (212, 208, 205): (29, 33, 33),
-              (41, 39, 42): (238, 232, 220),
-              (110, 105, 101): (65, 68, 65),
-              (177, 170, 156): (122, 127, 115),
-              (0, 0, 0): (238, 232, 220),
-          }
-          for y in range(dark.height):
-              for x in range(dark.width):
-                  color = pixels[x, y]
-                  if color in recolor:
-                      pixels[x, y] = recolor[color]
-          dark.save(dark_path, format="PNG", optimize=True)
-
-          for path in (light_path, dark_path):
-              with Image.open(path) as image:
-                  image.verify()
-          print("Verified clean light/dark PNG assets.")
-          PY
+          python scripts/generate_brand_assets.py
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
