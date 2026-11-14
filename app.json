@@ -5,7 +5,7 @@
     "scheme": "mothlight",
     "version": "0.1.0",
     "orientation": "default",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -16,10 +16,29 @@
       "resizeableActivity": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#D4D0CD"
+        "backgroundColor": "#D4D0CD",
+        "foregroundImage": "./assets/mothlight-icon.png"
       }
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/mothlight-icon.png",
+          "imageWidth": 190,
+          "backgroundColor": "#D4D0CD",
+          "dark": {
+            "image": "./assets/mothlight-icon-dark.png",
+            "backgroundColor": "#1D2121"
+          }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Mothlight uses Face ID to unlock your private writing space."
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -34,6 +53,7 @@
           "color": "#C2D3A9"
         }
       ]
-    ]
+    ],
+    "icon": "./assets/mothlight-icon.png"
   }
 }
