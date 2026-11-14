@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Mothlight",
+    "slug": "mothlight",
+    "scheme": "mothlight",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.saimkazi.mothlight"
+    },
+    "android": {
+      "package": "dev.saimkazi.mothlight",
+      "resizeableActivity": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#D4D0CD"
+      }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Mothlight uses your photo library when you attach an image to a note.",
+          "cameraPermission": "Mothlight uses the camera only when you choose to capture an attachment.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#C2D3A9"
+        }
+      ]
+    ]
+  }
+}
