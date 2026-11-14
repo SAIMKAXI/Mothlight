@@ -38,6 +38,8 @@ import {
   reminderReducer,
   saveReducer,
   searchReducer,
+  shareReducer,
+  deleteReducer,
   toolbarReducer,
   type Panel,
   type Screen,
@@ -175,6 +177,9 @@ export default function App() {
     else dispatchHelper({ type: 'DISCARD' });
   };
   const [saveState, dispatchSave] = useReducer(saveReducer, initialSaveState);
+  const [settingsSaveState, dispatchSettingsSave] = useReducer(saveReducer, initialSaveState);
+  const [shareState, dispatchShare] = useReducer(shareReducer, 'idle');
+  const [deleteState, dispatchDelete] = useReducer(deleteReducer, 'idle');
 
   const setPanel = (nextPanel: Panel) => {
     if (nextPanel === null) {
@@ -207,6 +212,8 @@ export default function App() {
   const searchRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const saveRevisionRef = useRef(0);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const settingsRevisionRef = useRef(0);
+  const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const strikeValue = useRef(new Animated.Value(0)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
@@ -296,7 +303,20 @@ export default function App() {
 
   useEffect(() => {
     if (!ready) return;
-    AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)).catch(() => undefined);
+    const revision = ++settingsRevisionRef.current;
+    const snapshot = JSON.stringify(settings);
+    dispatchSettingsSave({ type: 'DIRTY', revision });
+    dispatchSettingsSave({ type: 'SAVE_STARTED', revision });
+    settingsSaveQueueRef.current = settingsSaveQueueRef.current
+      .then(() => AsyncStorage.setItem(SETTINGS_KEY, snapshot))
+      .then(() => dispatchSettingsSave({ type: 'SAVE_SUCCEEDED', revision }))
+      .catch((error: unknown) => {
+        dispatchSettingsSave({
+          type: 'SAVE_FAILED',
+          revision,
+          error: error instanceof Error ? error.message : 'Settings write failed',
+        });
+      });
   }, [settings, ready]);
 
   useEffect(() => {
@@ -393,15 +413,21 @@ export default function App() {
       ? (next.split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 42) || 'Untitled note')
       : currentNote.title;
     updateNote(currentNote.id, { content: next, title: generatedTitle });
-  }, [currentNote, playMechanical, updateNote, carriageX]);
+  }, [currentNote, playMechanical, updateNote]);
 
   const setSettingsValue = (patch: Partial<Settings>) => setSettings((old) => ({ ...old, ...patch }));
 
   const shareNote = async () => {
-    if (!currentNote) return;
+    if (!currentNote || shareState === 'opening') return;
+    dispatchShare({ type: 'START' });
     try {
-      await Share.share({ title: getTitle(currentNote), message: currentNote.content || getTitle(currentNote) });
+      const result = await Share.share({
+        title: getTitle(currentNote),
+        message: currentNote.content || getTitle(currentNote),
+      });
+      dispatchShare({ type: result.action === Share.sharedAction ? 'SHARED' : 'DISMISSED' });
     } catch {
+      dispatchShare({ type: 'FAILED' });
       Alert.alert('Unable to share', 'The system share sheet could not be opened.');
     }
   };
@@ -458,21 +484,33 @@ export default function App() {
     if (!currentNote) return;
     updateNote(currentNote.id, {
       attachments: currentNote.attachments.filter((attachment) => attachment.id !== attachmentId),
-    });  };
+    });
+  };
 
   const deleteCurrentNote = () => {
-    if (!currentNote) return;
+    if (!currentNote || deleteState !== 'idle') return;
+    dispatchDelete({ type: 'REQUEST' });
     Alert.alert('Delete this page?', 'This note and its local attachments will be removed from this device.', [
-      { text: 'Keep note', style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive', onPress: () => {
-          if (currentNote.reminderId) void Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
+        text: 'Keep note',
+        style: 'cancel',
+        onPress: () => dispatchDelete({ type: 'CANCEL' }),
+      },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          dispatchDelete({ type: 'CONFIRM' });
+          if (currentNote.reminderId) {
+            void Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
+          }
           const remaining = notes.filter((note) => note.id !== currentNote.id);
           setNotes(remaining);
           setCurrentNoteId(remaining[0]?.id ?? null);
           dispatchHistory({ type: 'RESET' });
           setPanel(null);
           setScreen(remaining.length ? 'editor' : 'library');
+          dispatchDelete({ type: 'COMPLETE' });
         },
       },
     ]);
@@ -552,7 +590,7 @@ export default function App() {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
     if (start === end && currentNote) {
-      const lineStart = content.lastIndexOf('\\n', Math.max(0, start - 1)) + 1;
+      const lineStart = content.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
       const next = (content.slice(0, lineStart) + prefix + content.slice(lineStart)).slice(0, MAX_CHARS);
       dispatchHistory({ type: 'RECORD', value: content });
       updateNote(currentNote.id, { content: next });
@@ -563,7 +601,7 @@ export default function App() {
       return;
     }
     const selected = content.slice(start, end);
-    const formatted = selected.split('\\n').map((line) => prefix + line).join('\\n') + suffix;
+    const formatted = selected.split('\n').map((line) => prefix + line).join('\n') + suffix;
     insertAtSelection(formatted, formatted.length);
   };
 
