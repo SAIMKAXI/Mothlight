@@ -16,16 +16,24 @@ def envelope(time: float, start: float, decay: float) -> float:
 
 
 def write_wav(path: str, duration: float, samples: list[float]) -> None:
+    # Keep the transient detail while storing compact, broadly supported PCM WAV files.
     peak = max(max(abs(sample) for sample in samples), 1e-8)
-    gain = 0.86 / peak
+    gain = 0.80 / peak
+    output_rate = 12_000
+    output_frames = round(len(samples) * output_rate / SAMPLE_RATE)
     frames = bytearray()
-    for value in samples:
-        sample = int(max(-1.0, min(1.0, value * gain)) * 32767)
-        frames.extend(struct.pack("<h", sample))
+    for index in range(output_frames):
+        source_position = index * SAMPLE_RATE / output_rate
+        lower = int(source_position)
+        upper = min(lower + 1, len(samples) - 1)
+        fraction = source_position - lower
+        value = samples[lower] * (1 - fraction) + samples[upper] * fraction
+        pcm = max(0, min(255, 128 + round(value * gain * 127)))
+        frames.append(pcm)
     with wave.open(path, "wb") as output:
         output.setnchannels(1)
-        output.setsampwidth(2)
-        output.setframerate(SAMPLE_RATE)
+        output.setsampwidth(1)
+        output.setframerate(output_rate)
         output.writeframes(frames)
 
 
