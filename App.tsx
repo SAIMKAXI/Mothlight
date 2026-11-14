@@ -1721,7 +1721,7 @@ function makeStyles(colors: ThemeColors) {
   pinSetupSubtitle: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 8, textAlign: 'center' },
   pinCancelButton: { alignSelf: 'center', padding: 12, marginTop: 8 },
   pinCancelText: { color: colors.muted, fontSize: 12 },
-  pinFootnote: { color: colors.muted, fontSize: 10, marginTop: 18, textAlign: 'center' },
+  lockFootnote: { color: colors.muted, fontSize: 10, marginTop: 18, textAlign: 'center' },
   onboardingRoot: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 28, paddingTop: 20, paddingBottom: 22 },
   onboardingTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 38 },
   onboardingKicker: { color: colors.muted, fontSize: 9, letterSpacing: 1.35 },
