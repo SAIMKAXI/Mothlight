@@ -37,6 +37,7 @@ export type ThemeColors = {
   iconMuted: string;
   overlay: string;
   shadow: string;
+  amber: string;
 };
 
 export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
@@ -76,6 +77,7 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
     iconMuted: '#777277',
     overlay: 'rgba(35,32,33,0.25)',
     shadow: '#29272A',
+    amber: '#D6AD61',
   },
   dark: {
     background: '#1D2121',
@@ -113,6 +115,7 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
     iconMuted: '#AAA7A0',
     overlay: 'rgba(0,0,0,0.58)',
     shadow: '#000000',
+    amber: '#D6AD61',
   },
 };
 
