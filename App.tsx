@@ -1515,7 +1515,7 @@ function AppContent() {
             {panel === 'format' ? (
               <View>
                 <View style={styles.formatGrid}>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('# ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
