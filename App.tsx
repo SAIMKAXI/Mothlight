@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   Alert, Animated, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
   Platform, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput,
@@ -19,6 +19,29 @@ import {
 } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
+import {
+  attachmentReducer,
+  bootReducer,
+  helperReducer,
+  historyReducer,
+  initialAttachmentState,
+  initialBootState,
+  initialEditorHistory,
+  initialHelperState,
+  initialNavigationState,
+  initialReminderState,
+  initialSaveState,
+  initialSearchState,
+  initialTypewriterState,
+  keyboardReducer,
+  navigationReducer,
+  reminderReducer,
+  saveReducer,
+  searchReducer,
+  toolbarReducer,
+  type Panel,
+  type Screen,
+} from './src/stateMachines';
 
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
@@ -42,7 +65,6 @@ type Note = {
   reminderAt?: number;
 };
 type Settings = { typewriterSound: boolean; haptics: boolean };
-type Panel = 'ideas' | 'page' | 'search' | 'format' | 'settings' | 'reminder' | 'smart' | null;
 type IconLike = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 
 const makeNote = (): Note => {
@@ -128,24 +150,63 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>({ typewriterSound: true, haptics: true });
-  const [ready, setReady] = useState(false);
-  const [screen, setScreen] = useState<'editor' | 'library'>('editor');
-  const [panel, setPanel] = useState<Panel>(null);
-  const [toolbarExpanded, setToolbarExpanded] = useState(true);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  const [bootState, dispatchBoot] = useReducer(bootReducer, initialBootState);
+  const ready = bootState.status === 'ready';
+  const [navigation, dispatchNavigation] = useReducer(navigationReducer, initialNavigationState);
+  const screen = navigation.screen;
+  const panel = navigation.panel;
+  const [toolbarState, dispatchToolbar] = useReducer(toolbarReducer, 'expanded');
+  const toolbarExpanded = toolbarState === 'expanded';
+  const [keyboardState, dispatchKeyboard] = useReducer(keyboardReducer, 'hidden');
+  const keyboardVisible = keyboardState === 'visible';
+  const setKeyboardVisible = (visible: boolean) => dispatchKeyboard({ type: visible ? 'SHOW' : 'HIDE' });
+  const [history, dispatchHistory] = useReducer(historyReducer, initialEditorHistory);
+  const [typewriterState, dispatchTypewriter] = useReducer(typewriterReducer, initialTypewriterState);
+  const [attachmentState, dispatchAttachment] = useReducer(attachmentReducer, initialAttachmentState);
+  const [reminderState, dispatchReminder] = useReducer(reminderReducer, initialReminderState);
+  const [searchState, dispatchSearch] = useReducer(searchReducer, initialSearchState);
+  const searchText = searchState.status === 'closed' ? '' : searchState.query;
+  const setSearchText = (query: string) => dispatchSearch({ type: 'QUERY_CHANGED', query });
+  const [helperState, dispatchHelper] = useReducer(helperReducer, initialHelperState);
+  const helperResult = helperState.status === 'preview' ? helperState.text : '';
+  const setHelperResult = (value: string) => {
+    if (value) dispatchHelper({ type: 'PREVIEW', title: 'Draft result', text: value });
+    else dispatchHelper({ type: 'DISCARD' });
+  };
+  const [saveState, dispatchSave] = useReducer(saveReducer, initialSaveState);
+
+  const setPanel = (nextPanel: Panel) => {
+    if (nextPanel === null) {
+      dispatchNavigation({ type: 'CLOSE_PANEL' });
+      dispatchSearch({ type: 'CLOSE' });
+      dispatchHelper({ type: 'CLOSE' });
+      return;
+    }
+    dispatchNavigation({ type: 'OPEN_PANEL', panel: nextPanel });
+    if (nextPanel === 'search') dispatchSearch({ type: 'OPEN' });
+    else dispatchSearch({ type: 'CLOSE' });
+    if (nextPanel === 'ideas' || nextPanel === 'smart') {
+      dispatchHelper({ type: 'OPEN', mode: nextPanel });
+    } else {
+      dispatchHelper({ type: 'CLOSE' });
+    }
+  };
+  const setScreen = (nextScreen: Screen) => {
+    dispatchNavigation({ type: nextScreen === 'library' ? 'OPEN_LIBRARY' : 'OPEN_EDITOR' });
+    dispatchSearch({ type: 'CLOSE' });
+    dispatchHelper({ type: 'CLOSE' });
+  };
+
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [stageWidth, setStageWidth] = useState(0);
   const [railWidth, setRailWidth] = useState(0);
   const [glyphWidth, setGlyphWidth] = useState(9.2);
-  const [searchText, setSearchText] = useState('');
-  const [helperResult, setHelperResult] = useState('');
-  const [savedFeedback, setSavedFeedback] = useState(false);
-  const [strikeTick, setStrikeTick] = useState(0);
 
   const editorRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const searchRef = useRef<React.ElementRef<typeof TextInput>>(null);
-  const undoStack = useRef<string[]>([]);
-  const redoStack = useRef<string[]>([]);
+  const saveRevisionRef = useRef(0);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const strikeValue = useRef(new Animated.Value(0)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
@@ -163,6 +224,7 @@ export default function App() {
   useEffect(() => {
     let active = true;
     const load = async () => {
+      let source: 'stored' | 'fresh' | 'recovered' = 'fresh';
       try {
         const [rawNotes, rawSettings] = await Promise.all([
           AsyncStorage.getItem(NOTES_KEY),
@@ -175,15 +237,18 @@ export default function App() {
             setNotes(parsed);
             const latest = [...parsed].sort((a, b) => b.updatedAt - a.updatedAt)[0];
             setCurrentNoteId(latest.id);
+            source = 'stored';
           } else {
             const first = makeNote();
             setNotes([first]);
             setCurrentNoteId(first.id);
+            source = 'fresh';
           }
         } else {
           const first = makeNote();
           setNotes([first]);
           setCurrentNoteId(first.id);
+          source = 'fresh';
         }
         if (rawSettings) {
           const parsedSettings = JSON.parse(rawSettings) as Partial<Settings>;
@@ -194,12 +259,13 @@ export default function App() {
         }
       } catch {
         const first = makeNote();
+        source = 'recovered';
         if (active) {
           setNotes([first]);
           setCurrentNoteId(first.id);
         }
       } finally {
-        if (active) setReady(true);
+        if (active) dispatchBoot({ type: 'HYDRATED', source });
       }
     };
     void load();
@@ -208,11 +274,22 @@ export default function App() {
 
   useEffect(() => {
     if (!ready) return;
+    const revision = ++saveRevisionRef.current;
+    const snapshot = JSON.stringify(notes);
+    dispatchSave({ type: 'DIRTY', revision });
     const timer = setTimeout(() => {
-      AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes)).then(() => {
-        setSavedFeedback(true);
-        setTimeout(() => setSavedFeedback(false), 700);
-      }).catch(() => undefined);
+      dispatchSave({ type: 'SAVE_STARTED', revision });
+      // Serialize writes so an older snapshot can never finish after a newer one.
+      saveQueueRef.current = saveQueueRef.current
+        .then(() => AsyncStorage.setItem(NOTES_KEY, snapshot))
+        .then(() => dispatchSave({ type: 'SAVE_SUCCEEDED', revision }))
+        .catch((error: unknown) => {
+          dispatchSave({
+            type: 'SAVE_FAILED',
+            revision,
+            error: error instanceof Error ? error.message : 'Storage write failed',
+          });
+        });
     }, 420);
     return () => clearTimeout(timer);
   }, [notes, ready]);
@@ -223,8 +300,8 @@ export default function App() {
   }, [settings, ready]);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    const show = Keyboard.addListener('keyboardDidShow', () => dispatchKeyboard({ type: 'SHOW' }));
+    const hide = Keyboard.addListener('keyboardDidHide', () => dispatchKeyboard({ type: 'HIDE' }));
     return () => { show.remove(); hide.remove(); };
   }, []);
 
@@ -245,13 +322,28 @@ export default function App() {
   }, [targetCarriageX, carriageX]);
 
   useEffect(() => {
-    if (strikeTick === 0) return;
+    if (typewriterState.phase === 'idle') return;
+    const sequence = typewriterState.sequence;
+    if (typewriterState.phase === 'striking' && typewriterState.kind === 'backspace') {
+      dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
+      return;
+    }
     strikeValue.stopAnimation();
     Animated.sequence([
       Animated.timing(strikeValue, { toValue: 5, duration: 38, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.timing(strikeValue, { toValue: 0, duration: 76, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-    ]).start();
-  }, [strikeTick, strikeValue]);
+    ]).start(({ finished }) => {
+      if (finished) dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
+    });
+    if (typewriterState.phase === 'carriage-returning') {
+      Animated.timing(carriageX, {
+        toValue: 0,
+        duration: 145,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [typewriterState.sequence, typewriterState.phase, strikeValue, carriageX]);
 
   useEffect(() => {
     clickPlayer.volume = 0.14;
@@ -268,8 +360,7 @@ export default function App() {
     setNotes((existing) => [note, ...existing]);
     setCurrentNoteId(note.id);
     setSelection({ start: 0, end: 0 });
-    undoStack.current = [];
-    redoStack.current = [];
+    dispatchHistory({ type: 'RESET' });
     setPanel(null);
     setScreen('editor');
   }, []);
@@ -294,15 +385,9 @@ export default function App() {
     const next = nextValue.slice(0, MAX_CHARS);
     const kind = classifyEdit(currentNote.content, next);
     if (kind !== 'none') {
-      undoStack.current = [...undoStack.current.slice(-60), currentNote.content];
-      redoStack.current = [];
+      dispatchHistory({ type: 'RECORD', value: currentNote.content });
       playMechanical(kind);
-      if (kind === 'key' || kind === 'space' || kind === 'return') setStrikeTick((tick) => tick + 1);
-      if (kind === 'return') {
-        Animated.timing(carriageX, {
-          toValue: 0, duration: 145, easing: Easing.out(Easing.cubic), useNativeDriver: true,
-        }).start();
-      }
+      dispatchTypewriter({ type: 'KEYSTROKE', kind });
     }
     const generatedTitle = currentNote.title === 'Untitled note'
       ? (next.split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 42) || 'Untitled note')
@@ -322,22 +407,33 @@ export default function App() {
   };
 
   const attachImage = async () => {
+    if (!currentNote || attachmentState.status === 'requesting-permission' ||
+        attachmentState.status === 'picking' || attachmentState.status === 'validating') return;
+    dispatchAttachment({ type: 'START' });
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
+        dispatchAttachment({ type: 'PERMISSION_DENIED' });
         Alert.alert('Photo access needed', 'Allow photo access to attach an image to this note.');
         return;
       }
+      dispatchAttachment({ type: 'PERMISSION_GRANTED' });
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], quality: 0.55, base64: true, allowsEditing: false,
       });
-      if (result.canceled || !result.assets[0]) return;
+      if (result.canceled || !result.assets[0]) {
+        dispatchAttachment({ type: 'PICKER_CANCELLED' });
+        return;
+      }
+      dispatchAttachment({ type: 'ASSET_SELECTED' });
       const asset = result.assets[0];
       if (!asset.base64) {
+        dispatchAttachment({ type: 'FAILED', reason: 'Selected image data was unavailable' });
         Alert.alert('Could not attach image', 'The selected image could not be read.');
         return;
       }
       if ((asset.fileSize ?? 0) > 4_000_000) {
+        dispatchAttachment({ type: 'TOO_LARGE' });
         Alert.alert('Image is too large', 'Choose an image smaller than 4 MB.');
         return;
       }
@@ -347,8 +443,13 @@ export default function App() {
         name: asset.fileName || 'Image attachment',
         uri: 'data:' + mime + ';base64,' + asset.base64,
       };
-      updateNote(currentNote!.id, { attachments: [...(currentNote!.attachments || []), attachment] });
-    } catch {
+      updateNote(currentNote.id, { attachments: [...(currentNote.attachments || []), attachment] });
+      dispatchAttachment({ type: 'ATTACHED', attachmentId: attachment.id });
+    } catch (error) {
+      dispatchAttachment({
+        type: 'FAILED',
+        reason: error instanceof Error ? error.message : 'Photo library unavailable',
+      });
       Alert.alert('Image unavailable', 'Mothlight could not open the photo library.');
     }
   };
@@ -357,8 +458,7 @@ export default function App() {
     if (!currentNote) return;
     updateNote(currentNote.id, {
       attachments: currentNote.attachments.filter((attachment) => attachment.id !== attachmentId),
-    });
-  };
+    });  };
 
   const deleteCurrentNote = () => {
     if (!currentNote) return;
@@ -370,6 +470,7 @@ export default function App() {
           const remaining = notes.filter((note) => note.id !== currentNote.id);
           setNotes(remaining);
           setCurrentNoteId(remaining[0]?.id ?? null);
+          dispatchHistory({ type: 'RESET' });
           setPanel(null);
           setScreen(remaining.length ? 'editor' : 'library');
         },
@@ -391,20 +492,27 @@ export default function App() {
     };
     setNotes((existing) => [copy, ...existing]);
     setCurrentNoteId(copy.id);
+    dispatchHistory({ type: 'RESET' });
     setPanel(null);
     setScreen('editor');
     setSelection({ start: copy.content.length, end: copy.content.length });
   };
 
   const scheduleReminder = async (minutes: number) => {
-    if (!currentNote) return;
+    if (!currentNote || reminderState.status === 'requesting-permission' ||
+        reminderState.status === 'scheduling') return;
+    dispatchReminder({ type: 'START' });
     try {
       const permission = await Notifications.requestPermissionsAsync();
       if (!permission.granted) {
+        dispatchReminder({ type: 'PERMISSION_DENIED' });
         Alert.alert('Notifications are off', 'Allow notifications in system settings to receive note reminders.');
         return;
       }
-      if (currentNote.reminderId) await Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
+      dispatchReminder({ type: 'PERMISSION_GRANTED' });
+      if (currentNote.reminderId) {
+        await Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
+      }
       const fireAt = new Date(Date.now() + minutes * 60_000);
       const id = await Notifications.scheduleNotificationAsync({
         content: {
@@ -415,9 +523,14 @@ export default function App() {
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: fireAt },
       });
       updateNote(currentNote.id, { reminderId: id, reminderAt: fireAt.getTime() });
+      dispatchReminder({ type: 'SCHEDULED', notificationId: id, fireAt: fireAt.getTime() });
       setPanel(null);
       Alert.alert('Reminder set', 'Mothlight will gently remind you ' + (minutes < 60 ? 'in ' + minutes + ' minutes.' : minutes < 1440 ? 'in ' + Math.round(minutes / 60) + ' hour(s).' : 'tomorrow.'));
-    } catch {
+    } catch (error) {
+      dispatchReminder({
+        type: 'FAILED',
+        reason: error instanceof Error ? error.message : 'Notification scheduling failed',
+      });
       Alert.alert('Reminder unavailable', 'The operating system could not schedule this reminder.');
     }
   };
@@ -427,8 +540,7 @@ export default function App() {
     const start = Math.min(selection.start, selection.end);
     const end = Math.max(selection.start, selection.end);
     const next = (content.slice(0, start) + replacement + content.slice(end)).slice(0, MAX_CHARS);
-    undoStack.current = [...undoStack.current.slice(-60), content];
-    redoStack.current = [];
+    dispatchHistory({ type: 'RECORD', value: content });
     updateNote(currentNote.id, { content: next });
     const caret = Math.min(next.length, start + caretOffset);
     setSelection({ start: caret, end: caret });
@@ -442,8 +554,7 @@ export default function App() {
     if (start === end && currentNote) {
       const lineStart = content.lastIndexOf('\\n', Math.max(0, start - 1)) + 1;
       const next = (content.slice(0, lineStart) + prefix + content.slice(lineStart)).slice(0, MAX_CHARS);
-      undoStack.current = [...undoStack.current.slice(-60), content];
-      redoStack.current = [];
+      dispatchHistory({ type: 'RECORD', value: content });
       updateNote(currentNote.id, { content: next });
       const caret = Math.min(next.length, start + prefix.length);
       setSelection({ start: caret, end: caret });
@@ -457,9 +568,9 @@ export default function App() {
   };
 
   const undo = () => {
-    if (!currentNote || !undoStack.current.length) return;
-    const target = undoStack.current.pop()!;
-    redoStack.current.push(content);
+    if (!currentNote || !history.undo.length) return;
+    const target = history.undo[history.undo.length - 1];
+    dispatchHistory({ type: 'UNDO', current: content });
     updateNote(currentNote.id, { content: target });
     const caret = Math.min(selection.start, target.length);
     setSelection({ start: caret, end: caret });
@@ -467,9 +578,9 @@ export default function App() {
   };
 
   const redo = () => {
-    if (!currentNote || !redoStack.current.length) return;
-    const target = redoStack.current.pop()!;
-    undoStack.current.push(content);
+    if (!currentNote || !history.redo.length) return;
+    const target = history.redo[history.redo.length - 1];
+    dispatchHistory({ type: 'REDO', current: content });
     updateNote(currentNote.id, { content: target });
     const caret = Math.min(selection.start, target.length);
     setSelection({ start: caret, end: caret });
@@ -484,9 +595,11 @@ export default function App() {
     let index = haystack.indexOf(needle, from);
     if (index < 0) index = haystack.indexOf(needle, 0);
     if (index < 0) {
+      dispatchSearch({ type: 'NOT_FOUND', query: searchText });
       Alert.alert('No match found', 'That phrase is not in this note.');
       return;
     }
+    dispatchSearch({ type: 'FOUND', query: searchText, start: index, end: index + needle.length });
     const nextSelection = { start: index, end: index + needle.length };
     setSelection(nextSelection);
     editorRef.current?.focus();
@@ -495,8 +608,7 @@ export default function App() {
 
   const applyHelperText = (_title: string, next: string) => {
     if (!currentNote) return;
-    undoStack.current = [...undoStack.current.slice(-60), content];
-    redoStack.current = [];
+    dispatchHistory({ type: 'RECORD', value: content });
     const updated = next.slice(0, MAX_CHARS);
     updateNote(currentNote.id, { content: updated });
     const caret = updated.length;
@@ -543,6 +655,7 @@ export default function App() {
   const openNote = (noteId: string) => {
     setCurrentNoteId(noteId);
     setSelection({ start: 0, end: 0 });
+    dispatchHistory({ type: 'RESET' });
     setPanel(null);
     setScreen('editor');
   };
@@ -686,7 +799,7 @@ export default function App() {
               <IconButton
                 icon={toolbarExpanded ? ChevronDown : ChevronUp}
                 label={toolbarExpanded ? 'Collapse toolbar' : 'Expand toolbar'}
-                onPress={() => setToolbarExpanded((value) => !value)}
+                onPress={() => dispatchToolbar({ type: 'TOGGLE' })}
                 size={19}
               />
               {toolbarExpanded ? (
@@ -697,7 +810,9 @@ export default function App() {
                 </ScrollView>
               ) : null}
               <View style={styles.toolbarEndMark}>
-                {savedFeedback ? <Check size={15} color={SAGE} /> : <View style={styles.toolbarEndDot} />}
+                {saveState.status === 'saved'
+                  ? <Check size={15} color={SAGE} />
+                  : <View style={[styles.toolbarEndDot, saveState.status === 'error' && { backgroundColor: '#B66D62' }]} />}
               </View>
             </View>
           </View>
@@ -717,8 +832,7 @@ export default function App() {
             {panel === 'ideas' ? (
               <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.sheetIntro}>Small local helpers. Your writing stays on this device.</Text>
-                <PanelAction icon={WandSparkles} title="Clean up spacing" detail="Tidy repeated spaces and punctuation." onPress={() => applyHelperText('Clean up spacing', content.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' '))} />
-                <PanelAction icon={List} title="Turn lines into a list" detail="Add a quiet bullet to each non-empty line." onPress={() => applyHelperText('Turn lines into a list', content.split('\n').map((line) => line.trim() ? '· ' + line : line).join('\n'))} />
+                <PanelAction icon={WandSparkles} title="Clean up spacing" detail="Tidy repeated spaces and punctuation." onPress={() => applyHelperText('Clean up spacing', content.replace(/[ \t]+([,.;!?])/g, '$1').replace(/[ \t]{2,}/g, ' '))} />                <PanelAction icon={List} title="Turn lines into a list" detail="Add a quiet bullet to each non-empty line." onPress={() => applyHelperText('Turn lines into a list', content.split('\n').map((line) => line.trim() ? '· ' + line : line).join('\n'))} />
                 <PanelAction icon={Lightbulb} title="Add a thought-starter" detail="Insert a gentle prompt at the cursor." onPress={() => insertAtSelection('What I want to remember is ')} />
               </ScrollView>
             ) : null}
@@ -796,7 +910,14 @@ export default function App() {
                     <Text style={styles.resultText}>{helperResult}</Text>
                     <View style={styles.resultButtons}>
                       <Pressable onPress={() => setHelperResult('')} style={styles.resultCancel}><Text style={styles.resultCancelText}>Discard</Text></Pressable>
-                      <Pressable onPress={() => { updateNote(currentNote!.id, { content: helperResult }); setHelperResult(''); setPanel(null); }} style={styles.resultApply}><Text style={styles.resultApplyText}>Replace note</Text></Pressable>
+                      <Pressable onPress={() => {
+                        if (currentNote) {
+                          dispatchHistory({ type: 'RECORD', value: content });
+                          updateNote(currentNote.id, { content: helperResult });
+                        }
+                        dispatchHelper({ type: 'APPLY' });
+                        setPanel(null);
+                      }} style={styles.resultApply}><Text style={styles.resultApplyText}>Replace note</Text></Pressable>
                     </View>
                   </View>
                 ) : (
