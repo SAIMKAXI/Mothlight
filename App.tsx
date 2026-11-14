@@ -560,7 +560,7 @@ export default function App() {
   if (screen === 'library') {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" backgroundColor={PAPER} />
+        <StatusBar barStyle="dark-content" />
         <View style={styles.library}>
           <View style={styles.libraryHeader}>
             <View>
@@ -606,7 +606,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" backgroundColor={PAPER} />
+      <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={styles.keyboardShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.appFrame}>
           <View style={styles.topBar}>
