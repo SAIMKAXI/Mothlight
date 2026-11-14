@@ -1,6 +1,6 @@
 {
   "name": "mothlight",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:states": "node --experimental-strip-types --test tests/stateMachines.test.mjs",
     "generate:brand-assets": "python scripts/generate_brand_assets.py",
-    "test:all": "node --experimental-strip-types --test tests/stateMachines.test.mjs tests/editorMetrics.test.mjs tests/noteModel.test.mjs tests/notificationRouting.test.mjs tests/interactionWiring.test.mjs",
+    "test:all": "node --experimental-strip-types --test tests/stateMachines.test.mjs tests/editorMetrics.test.mjs tests/noteModel.test.mjs tests/notificationRouting.test.mjs tests/formatting.test.mjs tests/pinInput.test.mjs tests/interactionWiring.test.mjs",
     "audit:interactions": "node scripts/audit-interactions.mjs"
   },
   "dependencies": {
@@ -27,8 +27,9 @@
     "react-native": "0.88.1",
     "react-native-safe-area-context": "^5.6.2",
     "react-native-svg": "15.16.0",
-    "expo-local-authentication": "~58.0.3",
-    "expo-splash-screen": "~58.0.14"
+    "expo-splash-screen": "~58.0.14",
+    "expo-secure-store": "~58.0.3",
+    "@expo/ui": "~58.0.28"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",

@@ -12,7 +12,7 @@ test('every interactive control in App.tsx has a real callback and input wiring'
   assert.equal(result.counts.textInputs, 2, 'editor and in-note search should both be controlled');
   assert.ok(result.counts.iconButtons >= 2);
   assert.ok(result.counts.panelActions >= 10);
-  assert.equal(result.counts.toggles, 1);
+  assert.equal(result.counts.toggles, 3);
   assert.equal(result.counts.flatLists, 1);
-  assert.equal(result.counts.modals, 1);
+  assert.equal(result.counts.modals, 2);
 });

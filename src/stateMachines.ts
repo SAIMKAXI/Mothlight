@@ -8,12 +8,11 @@ export type Panel =
   | 'page'
   | 'search'
   | 'format'
-  | 'settings'
   | 'reminder'
   | 'smart'
   | null;
 
-export type Screen = 'editor' | 'library';
+export type Screen = 'editor' | 'library' | 'settings';
 
 export type NavigationState = {
   screen: Screen;
@@ -23,11 +22,12 @@ export type NavigationState = {
 export type NavigationEvent =
   | { type: 'OPEN_LIBRARY' }
   | { type: 'OPEN_EDITOR' }
+  | { type: 'OPEN_SETTINGS' }
   | { type: 'OPEN_PANEL'; panel: Exclude<Panel, null> }
   | { type: 'CLOSE_PANEL' };
 
 export const initialNavigationState: NavigationState = {
-  screen: 'editor',
+  screen: 'library',
   panel: null,
 };
 
@@ -40,6 +40,8 @@ export function navigationReducer(
       return { screen: 'library', panel: null };
     case 'OPEN_EDITOR':
       return { screen: 'editor', panel: null };
+    case 'OPEN_SETTINGS':
+      return { screen: 'settings', panel: null };
     case 'OPEN_PANEL':
       return state.screen === 'editor' ? { ...state, panel: event.panel } : state;
     case 'CLOSE_PANEL':

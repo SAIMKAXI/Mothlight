@@ -18,10 +18,10 @@ For a native Android development build, run `npx expo run:android`. For iOS, run
 - A mechanical rail, two-dot sliding carriage and striking typebar driven by the native cursor selection and measured monospaced glyph width.
 - Quiet typewriter audio variations for normal keys, spaces, backspace and carriage return, plus independent sound and haptic settings.
 - Compact contextual tools for attachments, local writing suggestions, page actions, in-note search, text prefixes, undo/redo, settings, reminders and smart actions.
-- Local note storage, create/duplicate/delete, plain-text share and scheduled local notifications.
+- Local note storage, create/duplicate/delete, plain-text share and scheduled local notifications with quick presets and a custom date/time picker.
 - A three-step first-run onboarding flow, a native branded splash screen, and a reusable moth/page app mark.
-- A consistent System / Light / Dark appearance setting across the editor, library, panels, onboarding and lock screen.
-- Optional app lock using Face ID, fingerprint or the device passcode; it is an access gate, not at-rest encryption.
+- A Home screen with an explicit New note action and a separate Settings screen; System / Light / Dark appearance settings live outside the editor.
+- Optional six-digit in-app PIN lock stored securely on-device; it is an access gate, not at-rest note encryption.
 - The system keyboard is never simulated; Android uses resize behavior so the editor and toolbar stay above it.
 
 ## Appearance and app lock

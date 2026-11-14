@@ -11,7 +11,8 @@ import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Reg
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
-import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
+import DateTimePicker from '@expo/ui/community/datetime-picker';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   ArrowLeft, Bell, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
@@ -22,6 +23,8 @@ import {
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getNoteTitle as getTitle, normalizeNotes, type Note } from './src/noteModel';
 import { getReminderNoteId } from './src/notificationRouting';
+import { toggleLinePrefix, insertAtSelection as insertTextAtSelection } from './src/formatting';
+import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
 import {
@@ -58,6 +61,7 @@ import {
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
 const ONBOARDING_KEY = 'mothlight.onboarding.v1';
+const PIN_STORAGE_KEY = 'mothlight.private-pin.v1';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -72,6 +76,8 @@ SplashScreen.setOptions({ duration: 320, fade: true });
 const MAX_CHARS = 6000;
 
 type Settings = { typewriterSound: boolean; haptics: boolean; themeMode: ThemeMode; appLockEnabled: boolean };
+type Attachment = Note['attachments'][number];
+type PinSetupStep = 'create' | 'confirm' | null;
 type IconLike = React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
 type ThemeContextValue = { colors: ThemeColors; styles: ReturnType<typeof makeStyles> };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -161,6 +167,50 @@ function ToggleRow({
   );
 }
 
+function PinKeypad({
+  disabled, onDigit, onBackspace,
+}: {
+  disabled: boolean;
+  onDigit: (digit: string) => void;
+  onBackspace: () => void;
+}) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('PinKeypad must be rendered inside ThemeContext');
+  const { styles } = theme;
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'backspace'];
+  return (
+    <View style={styles.pinKeypad}>
+      {keys.map((key, index) => key === '' ? (
+        <View key={`empty-${index}`} />
+      ) : (
+        <Pressable
+          key={key}
+          disabled={disabled}
+          onPress={() => key === 'backspace' ? onBackspace() : onDigit(key)}
+          accessibilityRole="button"
+          accessibilityLabel={key === 'backspace' ? 'Delete last PIN digit' : `Digit ${key}`}
+          style={({ pressed }) => [styles.pinKey, pressed && styles.pressed, disabled && styles.disabledControl]}
+        >
+          <Text style={styles.pinKeyText}>{key === 'backspace' ? '⌫' : key}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function PinDots({ value }: { value: string }) {
+  const theme = useContext(ThemeContext);
+  if (!theme) throw new Error('PinDots must be rendered inside ThemeContext');
+  const { styles } = theme;
+  return (
+    <View style={styles.pinDotsRow} accessibilityLabel={`${value.length} of ${PIN_LENGTH} PIN digits entered`}>
+      {Array.from({ length: PIN_LENGTH }, (_, index) => (
+        <View key={index} style={[styles.pinDot, index < value.length && styles.pinDotFilled]} />
+      ))}
+    </View>
+  );
+}
+
 function AppContent() {
   const [fontsLoaded] = useFonts({ CourierPrime_400Regular });
   const insets = useSafeAreaInsets();
@@ -208,6 +258,14 @@ function AppContent() {
   const [shareState, dispatchShare] = useReducer(shareReducer, 'idle');
   const [deleteState, dispatchDelete] = useReducer(deleteReducer, 'idle');
   const [pendingReminderNoteId, setPendingReminderNoteId] = useState<string | null>(null);
+  const [storedPin, setStoredPin] = useState<string | null>(null);
+  const [pinSetupStep, setPinSetupStep] = useState<PinSetupStep>(null);
+  const [pinSetupDraft, setPinSetupDraft] = useState('');
+  const [pinEntry, setPinEntry] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [customReminderDate, setCustomReminderDate] = useState(() => new Date(Date.now() + 60 * 60 * 1000));
+  const [customReminderOpen, setCustomReminderOpen] = useState(false);
 
   const setPanel = (nextPanel: Panel) => {
     if (nextPanel === null) {
@@ -228,9 +286,12 @@ function AppContent() {
     }
   };
   const setScreen = (nextScreen: Screen) => {
-    dispatchNavigation({ type: nextScreen === 'library' ? 'OPEN_LIBRARY' : 'OPEN_EDITOR' });
+    if (nextScreen === 'library') dispatchNavigation({ type: 'OPEN_LIBRARY' });
+    else if (nextScreen === 'settings') dispatchNavigation({ type: 'OPEN_SETTINGS' });
+    else dispatchNavigation({ type: 'OPEN_EDITOR' });
     dispatchSearch({ type: 'CLOSE' });
     dispatchHelper({ type: 'CLOSE' });
+    Keyboard.dismiss();
   };
 
   const [selection, setSelection] = useState({ start: 0, end: 0 });
@@ -244,39 +305,13 @@ function AppContent() {
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const settingsRevisionRef = useRef(0);
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const appLockAttemptedRef = useRef(false);
-  const appLockInFlightRef = useRef(false);
   const appBackgroundAtRef = useRef<number | null>(null);
   const lastNotificationResponseRef = useRef<string | null>(null);
   const strikeValue = useRef(new Animated.Value(0)).current;
+  const bulbGlow = useRef(new Animated.Value(0.24)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
-
-  const authenticateToUnlock = useCallback(async () => {
-    if (appLockInFlightRef.current) return;
-    appLockInFlightRef.current = true;
-    dispatchAppLock({ type: 'AUTH_START' });
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock Mothlight',
-        cancelLabel: 'Not now',
-        fallbackLabel: 'Use device passcode',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        dispatchAppLock({ type: 'AUTH_SUCCESS' });
-      } else {
-        dispatchAppLock({
-          type: 'AUTH_FAILED',
-          reason: result.error === 'user_cancel' ? 'Unlock cancelled.' : 'Authentication was not successful.',
-        });
-      }
-    } catch {
-      dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Device authentication is unavailable.' });
-    } finally {
-      appLockInFlightRef.current = false;
-    }
-  }, []);
+  const returnPlayer = useAudioPlayer(require('./assets/typewriter-return.wav'));
 
   const currentNote = useMemo(
     () => notes.find((note) => note.id === currentNoteId) ?? null,
@@ -295,10 +330,11 @@ function AppContent() {
       let hasExistingNotes = false;
       let onboardingWasComplete = false;
       try {
-        const [rawNotes, rawSettings, rawOnboarding] = await Promise.all([
+        const [rawNotes, rawSettings, rawOnboarding, rawPin] = await Promise.all([
           AsyncStorage.getItem(NOTES_KEY),
           AsyncStorage.getItem(SETTINGS_KEY),
           AsyncStorage.getItem(ONBOARDING_KEY),
+          SecureStore.getItemAsync(PIN_STORAGE_KEY),
         ]);
         if (!active) return;
         hasExistingNotes = Boolean(rawNotes);
@@ -313,25 +349,25 @@ function AppContent() {
             setCurrentNoteId(latest.id);
             source = 'stored';
           } else {
-            const first = makeNote();
-            setNotes([first]);
-            setCurrentNoteId(first.id);
+            setNotes([]);
+            setCurrentNoteId(null);
             source = 'fresh';
           }
         } else {
-          const first = makeNote();
-          setNotes([first]);
-          setCurrentNoteId(first.id);
+          setNotes([]);
+          setCurrentNoteId(null);
           source = 'fresh';
         }
 
+        setStoredPin(rawPin);
         if (rawSettings) {
           const parsedSettings = JSON.parse(rawSettings) as Partial<Settings>;
           const themeMode: ThemeMode =
             parsedSettings.themeMode === 'light' || parsedSettings.themeMode === 'dark'
               ? parsedSettings.themeMode
               : 'system';
-          const appLockEnabled = parsedSettings.appLockEnabled === true;
+          const requestedAppLock = parsedSettings.appLockEnabled === true;
+          const appLockEnabled = requestedAppLock && Boolean(rawPin);
           setSettings({
             typewriterSound: parsedSettings.typewriterSound ?? true,
             haptics: parsedSettings.haptics ?? true,
@@ -339,15 +375,18 @@ function AppContent() {
             appLockEnabled,
           });
           dispatchAppLock({ type: appLockEnabled ? 'STARTUP_LOCK' : 'DISABLE' });
+          if (requestedAppLock && !rawPin) {
+            Alert.alert('PIN setup required', 'The previous biometric lock has been replaced by an in-app PIN. Set a new PIN in Settings.');
+          }
         } else {
           dispatchAppLock({ type: 'DISABLE' });
         }
       } catch {
-        const first = makeNote();
         source = 'recovered';
         if (active) {
-          setNotes([first]);
-          setCurrentNoteId(first.id);
+          setNotes([]);
+          setCurrentNoteId(null);
+          setStoredPin(null);
           dispatchAppLock({ type: 'DISABLE' });
         }
       } finally {
@@ -425,12 +464,6 @@ function AppContent() {
   }, [panel]);
 
   useEffect(() => {
-    if (!ready || appLockState.status !== 'locked' || appLockAttemptedRef.current) return;
-    appLockAttemptedRef.current = true;
-    void authenticateToUnlock();
-  }, [ready, appLockState.status, authenticateToUnlock]);
-
-  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background' && appBackgroundAtRef.current === null) {
         // iOS may emit "inactive" before "background"; timestamp the actual departure.
@@ -439,7 +472,8 @@ function AppContent() {
       if (nextState === 'active' && appBackgroundAtRef.current !== null) {
         const awayFor = Date.now() - appBackgroundAtRef.current;
         if (settings.appLockEnabled && awayFor >= 3000) {
-          appLockAttemptedRef.current = false;
+          setPinEntry('');
+          setPinError(null);
           Keyboard.dismiss();
           dispatchNavigation({ type: 'CLOSE_PANEL' });
           dispatchSearch({ type: 'CLOSE' });
@@ -471,6 +505,11 @@ function AppContent() {
   useEffect(() => {
     if (typewriterState.phase === 'idle') return;
     const sequence = typewriterState.sequence;
+    bulbGlow.stopAnimation();
+    Animated.sequence([
+      Animated.timing(bulbGlow, { toValue: 1, duration: 26, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(bulbGlow, { toValue: 0.24, duration: 190, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
     if (typewriterState.phase === 'striking' && typewriterState.kind === 'backspace') {
       dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
       return;
@@ -490,11 +529,12 @@ function AppContent() {
         useNativeDriver: true,
       }).start();
     }
-  }, [typewriterState.sequence, typewriterState.phase, strikeValue, carriageX]);
+  }, [typewriterState.sequence, typewriterState.phase, strikeValue, carriageX, bulbGlow]);
 
   useEffect(() => {
-    clickPlayer.volume = 0.14;
-  }, [clickPlayer]);
+    clickPlayer.volume = 0.38;
+    returnPlayer.volume = 0.42;
+  }, [clickPlayer, returnPlayer]);
 
   const updateNote = useCallback((id: string, patch: Partial<Note>) => {
     setNotes((existing) => existing.map((note) =>
@@ -516,16 +556,17 @@ function AppContent() {
     if (kind === 'none' || kind === 'paste') return;
     if (settings.typewriterSound) {
       try {
-        clickPlayer.volume = kind === 'return' ? 0.2 : kind === 'space' ? 0.1 : 0.14;
-        clickPlayer.playbackRate = kind === 'return' ? 0.72 : kind === 'space' ? 0.82 : kind === 'backspace' ? 1.24 : 1;
-        clickPlayer.seekTo(0);
-        clickPlayer.play();
-      } catch { /* Audio is optional when the device has no output route. */ }
+        const player = kind === 'return' ? returnPlayer : clickPlayer;
+        player.volume = kind === 'return' ? 0.62 : kind === 'space' ? 0.38 : kind === 'backspace' ? 0.48 : 0.58;
+        player.playbackRate = kind === 'return' ? 0.92 : kind === 'space' ? 0.88 : kind === 'backspace' ? 1.18 : 1;
+        player.seekTo(0);
+        player.play();
+      } catch { /* Sound is optional when the device has no output route. */ }
     }
     if (settings.haptics) {
       void Haptics.impactAsync(kind === 'return' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
-  }, [settings, clickPlayer]);
+  }, [settings.typewriterSound, settings.haptics, clickPlayer, returnPlayer]);
 
   const handleTextChange = useCallback((nextValue: string) => {
     if (!currentNote) return;
@@ -546,43 +587,87 @@ function AppContent() {
 
   const setAppLockEnabled = async (enabled: boolean) => {
     if (!enabled) {
-      setSettingsValue({ appLockEnabled: false });
-      dispatchAppLock({ type: 'DISABLE' });
-      appLockAttemptedRef.current = false;
+      Alert.alert('Disable PIN lock?', 'Mothlight will stop asking for your six-digit app PIN.', [
+        { text: 'Keep enabled', style: 'cancel' },
+        {
+          text: 'Disable lock',
+          style: 'destructive',
+          onPress: () => {
+            void SecureStore.deleteItemAsync(PIN_STORAGE_KEY).catch(() => undefined);
+            setStoredPin(null);
+            setSettingsValue({ appLockEnabled: false });
+            dispatchAppLock({ type: 'DISABLE' });
+            setPinEntry('');
+            setPinError(null);
+          },
+        },
+      ]);
       return;
     }
+    setPinEntry('');
+    setPinSetupDraft('');
+    setPinError(null);
+    setPinSetupStep('create');
+  };
+
+  const processPin = async (value: string) => {
+    if (!isValidPin(value) || pinBusy) return;
+    setPinBusy(true);
     try {
-      const [hasHardware, isEnrolled] = await Promise.all([
-        LocalAuthentication.hasHardwareAsync(),
-        LocalAuthentication.isEnrolledAsync(),
-      ]);
-      if (!hasHardware || !isEnrolled) {
-        Alert.alert(
-          'Set up biometrics first',
-          'Enable Face ID or a fingerprint on this device before turning on Mothlight app lock.',
-        );
+      if (pinSetupStep === 'create') {
+        setPinSetupDraft(value);
+        setPinEntry('');
+        setPinError(null);
+        setPinSetupStep('confirm');
         return;
       }
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirm to enable Mothlight lock',
-        cancelLabel: 'Cancel',
-        fallbackLabel: 'Use device passcode',
-        disableDeviceFallback: false,
-      });
-      if (!result.success) {
-        Alert.alert('App lock not enabled', 'Your device could not confirm your identity.');
+      if (pinSetupStep === 'confirm') {
+        if (value !== pinSetupDraft) {
+          setPinEntry('');
+          setPinSetupDraft('');
+          setPinSetupStep('create');
+          setPinError('The PINs did not match. Please start again.');
+          return;
+        }
+        await SecureStore.setItemAsync(PIN_STORAGE_KEY, value);
+        setStoredPin(value);
+        setSettingsValue({ appLockEnabled: true });
+        dispatchAppLock({ type: 'ENABLE' });
+        setPinSetupStep(null);
+        setPinSetupDraft('');
+        setPinEntry('');
+        setPinError(null);
         return;
       }
-      setSettingsValue({ appLockEnabled: true });
-      dispatchAppLock({ type: 'ENABLE' });
+      dispatchAppLock({ type: 'AUTH_START' });
+      const savedPin = storedPin ?? await SecureStore.getItemAsync(PIN_STORAGE_KEY);
+      if (savedPin && savedPin === value) {
+        setPinError(null);
+        dispatchAppLock({ type: 'AUTH_SUCCESS' });
+      } else {
+        setPinError('That PIN is not correct. Try again.');
+        dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Incorrect PIN.' });
+      }
+      setPinEntry('');
     } catch {
-      Alert.alert('App lock unavailable', 'Mothlight could not access device authentication.');
+      setPinError('Secure PIN storage is unavailable. Please try again.');
+      if (appLockState.status !== 'unlocked') {
+        dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Could not verify the app PIN.' });
+      }
+    } finally {
+      setPinBusy(false);
     }
   };
 
-  const retryUnlock = () => {
-    appLockAttemptedRef.current = false;
-    dispatchAppLock({ type: 'RETRY' });
+  const handlePinDigit = (digit: string) => {
+    if (pinBusy) return;
+    const next = appendPinDigit(pinEntry, digit);
+    setPinEntry(next);
+    if (next.length === PIN_LENGTH) void processPin(next);
+  };
+
+  const handlePinBackspace = () => {
+    if (!pinBusy) setPinEntry((current) => removePinDigit(current));
   };
 
   const completeOnboarding = async () => {
@@ -713,9 +798,13 @@ function AppContent() {
     setSelection({ start: copy.content.length, end: copy.content.length });
   };
 
-  const scheduleReminder = async (minutes: number) => {
+  const scheduleReminderAt = async (fireAt: Date) => {
     if (!currentNote || reminderState.status === 'requesting-permission' ||
         reminderState.status === 'scheduling') return;
+    if (!Number.isFinite(fireAt.getTime()) || fireAt.getTime() <= Date.now()) {
+      Alert.alert('Choose a future time', 'The reminder time must be later than now.');
+      return;
+    }
     dispatchReminder({ type: 'START' });
     try {
       const permission = await Notifications.requestPermissionsAsync();
@@ -728,7 +817,6 @@ function AppContent() {
       if (currentNote.reminderId) {
         await Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
       }
-      const fireAt = new Date(Date.now() + minutes * 60_000);
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: getTitle(currentNote),
@@ -739,8 +827,9 @@ function AppContent() {
       });
       updateNote(currentNote.id, { reminderId: id, reminderAt: fireAt.getTime() });
       dispatchReminder({ type: 'SCHEDULED', notificationId: id, fireAt: fireAt.getTime() });
+      setCustomReminderOpen(false);
       setPanel(null);
-      Alert.alert('Reminder set', 'Mothlight will gently remind you ' + (minutes < 60 ? 'in ' + minutes + ' minutes.' : minutes < 1440 ? 'in ' + Math.round(minutes / 60) + ' hour(s).' : 'tomorrow.'));
+      Alert.alert('Reminder set', 'Mothlight will remind you on ' + fireAt.toLocaleString() + '.');
     } catch (error) {
       dispatchReminder({
         type: 'FAILED',
@@ -750,36 +839,36 @@ function AppContent() {
     }
   };
 
-  const insertAtSelection = (replacement: string, caretOffset = replacement.length) => {
-    if (!currentNote) return;
-    const start = Math.min(selection.start, selection.end);
-    const end = Math.max(selection.start, selection.end);
-    const next = (content.slice(0, start) + replacement + content.slice(end)).slice(0, MAX_CHARS);
-    dispatchHistory({ type: 'RECORD', value: content });
-    updateNote(currentNote.id, { content: next });
-    const caret = Math.min(next.length, start + caretOffset);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
-    setPanel(null);
+  const scheduleReminder = (minutes: number) => {
+    void scheduleReminderAt(new Date(Date.now() + minutes * 60_000));
   };
 
-  const applyPrefix = (prefix: string, suffix = '') => {
-    const start = Math.min(selection.start, selection.end);
-    const end = Math.max(selection.start, selection.end);
-    if (start === end && currentNote) {
-      const lineStart = content.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-      const next = (content.slice(0, lineStart) + prefix + content.slice(lineStart)).slice(0, MAX_CHARS);
-      dispatchHistory({ type: 'RECORD', value: content });
-      updateNote(currentNote.id, { content: next });
-      const caret = Math.min(next.length, start + prefix.length);
-      setSelection({ start: caret, end: caret });
-      requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
-      setPanel(null);
-      return;
-    }
-    const selected = content.slice(start, end);
-    const formatted = selected.split('\n').map((line) => prefix + line).join('\n') + suffix;
-    insertAtSelection(formatted, formatted.length);
+  const focusEditorAt = (nextSelection: { start: number; end: number }) => {
+    setTimeout(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setNativeProps({ selection: nextSelection });
+    }, 220);
+  };
+
+  const insertAtSelection = (replacement: string) => {
+    if (!currentNote) return;
+    const result = insertTextAtSelection(content, selection, replacement, MAX_CHARS);
+    dispatchHistory({ type: 'RECORD', value: content });
+    updateNote(currentNote.id, { content: result.text });
+    setSelection(result.selection);
+    setPanel(null);
+    focusEditorAt(result.selection);
+  };
+
+  const applyPrefix = (prefix: string) => {
+    if (!currentNote) return;
+    const result = toggleLinePrefix(content, selection, prefix);
+    if (result.text === content) return;
+    dispatchHistory({ type: 'RECORD', value: content });
+    updateNote(currentNote.id, { content: result.text });
+    setSelection(result.selection);
+    setPanel(null);
+    focusEditorAt(result.selection);
   };
 
   const undo = () => {
@@ -788,8 +877,9 @@ function AppContent() {
     dispatchHistory({ type: 'UNDO', current: content });
     updateNote(currentNote.id, { content: target });
     const caret = Math.min(selection.start, target.length);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
+    const nextSelection = { start: caret, end: caret };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
   };
 
   const redo = () => {
@@ -798,8 +888,9 @@ function AppContent() {
     dispatchHistory({ type: 'REDO', current: content });
     updateNote(currentNote.id, { content: target });
     const caret = Math.min(selection.start, target.length);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
+    const nextSelection = { start: caret, end: caret };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
   };
 
   const findNext = () => {
@@ -857,7 +948,6 @@ function AppContent() {
     { icon: FileText, label: 'Page actions', action: () => setPanel('page') },
     { icon: Search, label: 'Search in note', action: () => { setSearchText(''); setPanel('search'); } },
     { icon: PenLine, label: 'Formatting tools', action: () => setPanel('format') },
-    { icon: SlidersHorizontal, label: 'Settings', action: () => setPanel('settings') },
     { icon: Bell, label: 'Reminder', action: () => setPanel('reminder') },
     { icon: Sparkles, label: 'Smart actions', action: () => { setHelperResult(''); setPanel('smart'); } },
   ];
@@ -866,7 +956,6 @@ function AppContent() {
     : panel === 'page' ? 'Page actions'
     : panel === 'search' ? 'Find in this note'
     : panel === 'format' ? 'Writing tools'
-    : panel === 'settings' ? 'Quiet settings'
     : panel === 'reminder' ? 'Remind me'
     : panel === 'smart' ? 'Smart actions' : '';
 
@@ -941,23 +1030,11 @@ function AppContent() {
             />
             <Text style={styles.brandWordmark}>mothlight</Text>
             <Text style={styles.lockTitle}>Your quiet space, kept private.</Text>
-            <Text style={styles.lockSubtitle}>
-              Unlock with the biometrics set up on this device. Your system may offer passcode fallback.
-            </Text>
-            {appLockState.status === 'failed' ? (
-              <Text style={styles.lockError}>{appLockState.reason}</Text>
-            ) : null}
-            <Pressable
-              style={[styles.lockButton, appLockState.status === 'authenticating' && styles.lockButtonDisabled]}
-              disabled={appLockState.status === 'authenticating'}
-              onPress={retryUnlock}
-            >
-              <LockKeyhole size={17} color={colors.inverseText} />
-              <Text style={styles.lockButtonText}>
-                {appLockState.status === 'authenticating' ? 'Authenticating…' : 'Unlock Mothlight'}
-              </Text>
-            </Pressable>
-            <Text style={styles.lockFootnote}>Uses Face ID or fingerprint, with system passcode fallback where supported.</Text>
+            <Text style={styles.lockSubtitle}>Enter your six-digit Mothlight PIN to continue.</Text>
+            <PinDots value={pinEntry} />
+            {pinError ? <Text style={styles.lockError}>{pinError}</Text> : null}
+            <PinKeypad disabled={pinBusy} onDigit={handlePinDigit} onBackspace={handlePinBackspace} />
+            <Text style={styles.lockFootnote}>Your PIN is stored securely on this device.</Text>
           </View>
         </SafeAreaView>
       </ThemeContext.Provider>
@@ -974,7 +1051,7 @@ function AppContent() {
     const descriptions = [
       'A clean sheet, a little room, and a typewriter’s rhythm. Mothlight gives unfinished thoughts somewhere to land.',
       'Keep the details close. Search your notes, attach images, and set gentle reminders for thoughts worth returning to.',
-      'Choose the light that suits you. You can switch appearance any time, and add an optional device lock in Settings.',
+      'Choose the light that suits you. You can change appearance and set a private six-digit app PIN in Settings.',
     ];
     return (
       <ThemeContext.Provider value={themeContextValue}>
@@ -1050,11 +1127,140 @@ function AppContent() {
               </View>
               {step === 2 ? (
                 <Text style={styles.onboardingPrivacy}>
-                  App lock is optional and uses your device authentication. Your notes stay on this device.
+                  An optional six-digit app PIN keeps this writing space private. Your notes stay on this device.
                 </Text>
               ) : null}
             </View>
           </View>
+        </SafeAreaView>
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (screen === 'settings') {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <View style={styles.settingsPage}>
+            <View style={styles.settingsPageHeader}>
+              <IconButton icon={ArrowLeft} label="Back to Home" onPress={() => setScreen('library')} />
+              <View style={styles.settingsPageTitleWrap}>
+                <Text style={styles.settingsPageTitle}>Settings</Text>
+                <Text style={styles.settingsPageSubtitle}>Make Mothlight feel like yours.</Text>
+              </View>
+              <View style={styles.settingsHeaderSpacer} />
+            </View>
+            <ScrollView contentContainerStyle={styles.settingsPageContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.settingsSection}>Appearance</Text>
+              <View style={styles.themeOptions}>
+                {([
+                  { value: 'system', label: 'System' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ] as const).map((option) => (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setSettingsValue({ themeMode: option.value })}
+                    style={[styles.themeOption, settings.themeMode === option.value && styles.themeOptionSelected]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: settings.themeMode === option.value }}
+                  >
+                    <Text style={[
+                      styles.themeOptionText,
+                      settings.themeMode === option.value && styles.themeOptionTextSelected,
+                    ]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.settingsSection}>Writing</Text>
+              <ToggleRow
+                icon={settings.typewriterSound ? Volume2 : VolumeX}
+                title="Typewriter sound"
+                subtitle="Audible mechanical key strikes and carriage return."
+                value={settings.typewriterSound}
+                onChange={(value) => setSettingsValue({ typewriterSound: value })}
+              />
+              <ToggleRow
+                icon={Vibrate}
+                title="Haptic feedback"
+                subtitle="Optional gentle tactile feedback as you type."
+                value={settings.haptics}
+                onChange={(value) => setSettingsValue({ haptics: value })}
+              />
+
+              <Text style={[styles.settingsSection, styles.settingsSecuritySection]}>Privacy</Text>
+              <ToggleRow
+                icon={LockKeyhole}
+                title="App PIN lock"
+                subtitle="Require your own six-digit PIN when you return."
+                value={settings.appLockEnabled}
+                onChange={(value) => { void setAppLockEnabled(value); }}
+              />
+              {settings.appLockEnabled ? (
+                <Pressable style={styles.changePinButton} onPress={() => {
+                  setPinSetupDraft('');
+                  setPinEntry('');
+                  setPinError(null);
+                  setPinSetupStep('create');
+                }} accessibilityRole="button">
+                  <Text style={styles.changePinText}>Change PIN</Text>
+                  <ChevronRight size={16} color={colors.iconMuted} />
+                </Pressable>
+              ) : null}
+
+              <Text style={styles.settingsFootnote}>
+                {settingsSaveState.status === 'error'
+                  ? 'Your preferences could not be saved. They may reset when the app closes.'
+                  : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
+                    ? 'Saving your preferences…'
+                    : 'Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
+              </Text>
+              <Text style={styles.settingsSecurityFootnote}>
+                The app PIN gates access to Mothlight. Notes remain in local app storage and are not encrypted by the PIN.
+              </Text>
+            </ScrollView>
+          </View>
+
+          <Modal visible={pinSetupStep !== null} transparent animationType="fade" onRequestClose={() => {
+            setPinSetupStep(null);
+            setPinEntry('');
+            setPinSetupDraft('');
+            setPinError(null);
+          }}>
+            <View style={styles.pinModalBackdrop}>
+              <View style={styles.pinSetupCard}>
+                <View style={styles.pinSetupHeader}>
+                  <Text style={styles.pinSetupTitle}>
+                    {pinSetupStep === 'confirm' ? 'Confirm your PIN' : 'Create your PIN'}
+                  </Text>
+                  <Pressable onPress={() => {
+                    setPinSetupStep(null);
+                    setPinEntry('');
+                    setPinSetupDraft('');
+                    setPinError(null);
+                  }} accessibilityRole="button" accessibilityLabel="Cancel PIN setup">
+                    <X size={20} color={colors.iconMuted} />
+                  </Pressable>
+                </View>
+                <Text style={styles.pinSetupSubtitle}>
+                  {pinSetupStep === 'confirm' ? 'Enter the same six digits once more.' : 'Choose a six-digit PIN for this device.'}
+                </Text>
+                <PinDots value={pinEntry} />
+                {pinError ? <Text style={styles.lockError}>{pinError}</Text> : null}
+                <PinKeypad disabled={pinBusy} onDigit={handlePinDigit} onBackspace={handlePinBackspace} />
+                <Pressable style={styles.pinCancelButton} onPress={() => {
+                  setPinSetupStep(null);
+                  setPinEntry('');
+                  setPinSetupDraft('');
+                  setPinError(null);
+                }}>
+                  <Text style={styles.pinCancelText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
         </SafeAreaView>
       </ThemeContext.Provider>
     );
@@ -1071,10 +1277,16 @@ function AppContent() {
               <Text style={styles.brandWordmark}>mothlight</Text>
               <Text style={styles.librarySubtitle}>A quieter place to think.</Text>
             </View>
-            <Pressable onPress={createNote} style={styles.newNoteButton}>
-              <Plus size={18} color={colors.text} strokeWidth={1.8} />
-              <Text style={styles.newNoteLabel}>New note</Text>
-            </Pressable>
+            <View style={styles.libraryActions}>
+              <Pressable onPress={() => setScreen('settings')} style={styles.settingsHomeButton} accessibilityRole="button" accessibilityLabel="Open settings">
+                <SlidersHorizontal size={18} color={colors.icon} />
+                <Text style={styles.settingsHomeLabel}>Settings</Text>
+              </Pressable>
+              <Pressable onPress={createNote} style={styles.newNoteButton} accessibilityRole="button" accessibilityLabel="Create a new note">
+                <Plus size={18} color={colors.text} strokeWidth={1.8} />
+                <Text style={styles.newNoteLabel}>New note</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={styles.libraryRule} />
           {notes.length === 0 ? (
@@ -1113,7 +1325,11 @@ function AppContent() {
     <ThemeContext.Provider value={themeContextValue}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <KeyboardAvoidingView style={styles.keyboardShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.keyboardShell}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
         <View style={styles.appFrame}>
           <View style={styles.topBar}>
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
@@ -1150,21 +1366,6 @@ function AppContent() {
               accessibilityLabel="Note text editor"
             />
 
-            {currentNote?.attachments?.length ? (
-              <View style={styles.attachmentStrip}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attachmentScroll}>
-                  {currentNote.attachments.map((attachment) => (
-                    <View key={attachment.id} style={styles.attachmentItem}>
-                      <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
-                      <Pressable onPress={() => removeAttachment(attachment.id)} style={styles.attachmentRemove} accessibilityRole="button" accessibilityLabel={`Remove ${attachment.name}`}>
-                        <X size={12} color={colors.toolbarText} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
             <View style={styles.glyphMeasure} pointerEvents="none" onLayout={(event) => {
               const measured = event.nativeEvent.layout.width / 12;
               if (Number.isFinite(measured) && measured > 1) setGlyphWidth(measured);
@@ -1176,6 +1377,17 @@ function AppContent() {
               <View style={styles.railShadow} />
               <View style={styles.railHighlight} />
               <Animated.View style={[styles.carriage, { transform: [{ translateX: carriageX }] }]}>
+                <Animated.View
+                  style={[
+                    styles.keyBulb,
+                    {
+                      opacity: bulbGlow,
+                      transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }],
+                    },
+                  ]}
+                >
+                  <Lightbulb size={15} color={colors.amber} fill={colors.amber} />
+                </Animated.View>
                 <Animated.View style={[styles.typebar, { transform: [{ translateY: strikeValue }] }]} />
                 <View style={styles.typebarTip} />
                 <View style={styles.carriageDots}>
@@ -1186,6 +1398,27 @@ function AppContent() {
             </View>
             <View style={styles.paperEdge} />
           </View>
+
+          {currentNote?.attachments?.length ? (
+            <View style={styles.attachmentShelf}>
+              <Text style={styles.attachmentShelfTitle}>ATTACHMENTS · {currentNote.attachments.length}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attachmentShelfItems}>
+                {currentNote.attachments.map((attachment) => (
+                  <View key={attachment.id} style={styles.attachmentItem}>
+                    <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
+                    <Pressable
+                      onPress={() => removeAttachment(attachment.id)}
+                      style={styles.attachmentRemove}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${attachment.name}`}
+                    >
+                      <X size={12} color={colors.toolbarText} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <View style={[styles.toolbarDock, keyboardVisible && styles.toolbarDockKeyboard]}>
             <View style={styles.toolbarPill}>
@@ -1283,7 +1516,7 @@ function AppContent() {
               <View>
                 <View style={styles.formatGrid}>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('· ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
@@ -1298,69 +1531,51 @@ function AppContent() {
               </View>
             ) : null}
 
-            {panel === 'settings' ? (
-              <ScrollView keyboardShouldPersistTaps="handled">
-                <Text style={styles.settingsSection}>Appearance</Text>
-                <View style={styles.themeOptions}>
-                  {([
-                    { value: 'system', label: 'System' },
-                    { value: 'light', label: 'Light' },
-                    { value: 'dark', label: 'Dark' },
-                  ] as const).map((option) => (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => setSettingsValue({ themeMode: option.value })}
-                      style={[styles.themeOption, settings.themeMode === option.value && styles.themeOptionSelected]}
-                    >
-                      <Text style={[
-                        styles.themeOptionText,
-                        settings.themeMode === option.value && styles.themeOptionTextSelected,
-                      ]}>{option.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <ToggleRow
-                  icon={settings.typewriterSound ? Volume2 : VolumeX}
-                  title="Typewriter sounds"
-                  subtitle="Soft mechanical clicks while you write."
-                  value={settings.typewriterSound}
-                  onChange={(value) => setSettingsValue({ typewriterSound: value })}
-                />
-                <ToggleRow
-                  icon={Vibrate}
-                  title="System haptics"
-                  subtitle="Use gentle native touch feedback."
-                  value={settings.haptics}
-                  onChange={(value) => setSettingsValue({ haptics: value })}
-                />
-                <ToggleRow
-                  icon={LockKeyhole}
-                  title="App lock (optional)"
-                  subtitle="Require device authentication when you return."
-                  value={settings.appLockEnabled}
-                  onChange={(value) => { void setAppLockEnabled(value); }}
-                />
-                <Text style={styles.settingsFootnote}>
-                  {settingsSaveState.status === 'error'
-                    ? 'Your preferences could not be saved. They may reset when the app closes.'
-                    : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
-                      ? 'Saving your preferences...'
-                      : 'Appearance follows your system choice by default. Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
-                </Text>
-                <Text style={styles.settingsSecurityFootnote}>
-                  App lock gates access to the app; it does not encrypt notes stored on this device.
-                </Text>
-              </ScrollView>
-            ) : null}
-
             {panel === 'reminder' ? (
-              <View>
-                <Text style={styles.sheetIntro}>Choose when this page should find its way back to you.</Text>
-                <PanelAction icon={Bell} title="In 10 minutes" detail="A gentle nudge, soon." onPress={() => void scheduleReminder(10)} />
-                <PanelAction icon={Clock3} title="In 1 hour" detail="Return to this thought later." onPress={() => void scheduleReminder(60)} />
-                <PanelAction icon={BookOpen} title="Tomorrow" detail="Bring this page back in 24 hours." onPress={() => void scheduleReminder(1440)} />
+              <ScrollView keyboardShouldPersistTaps="handled">
+                <Text style={styles.sheetIntro}>Choose a quick reminder or select an exact date and time.</Text>
+                <PanelAction icon={Bell} title="In 10 minutes" detail="A gentle nudge, soon." onPress={() => scheduleReminder(10)} disabled={reminderBusy} />
+                <PanelAction icon={Clock3} title="In 1 hour" detail="Return to this thought later." onPress={() => scheduleReminder(60)} disabled={reminderBusy} />
+                <PanelAction icon={BookOpen} title="Tomorrow" detail="Bring this page back in 24 hours." onPress={() => scheduleReminder(1440)} disabled={reminderBusy} />
+                <View style={styles.customReminderSection}>
+                  <Pressable
+                    style={styles.customReminderToggle}
+                    onPress={() => setCustomReminderOpen((open) => !open)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: customReminderOpen }}
+                  >
+                    <View style={styles.customReminderText}>
+                      <Text style={styles.customReminderTitle}>Custom date and time</Text>
+                      <Text style={styles.customReminderValue}>{customReminderDate.toLocaleString()}</Text>
+                    </View>
+                    <ChevronDown size={18} color={colors.iconMuted} />
+                  </Pressable>
+                  {customReminderOpen ? (
+                    <DateTimePicker
+                      value={customReminderDate}
+                      onValueChange={(_, selectedDate) => {
+                        setCustomReminderDate(selectedDate);
+                        if (Platform.OS === 'android') setCustomReminderOpen(false);
+                      }}
+                      onDismiss={() => setCustomReminderOpen(false)}
+                      mode="datetime"
+                      presentation={Platform.OS === 'android' ? 'dialog' : 'inline'}
+                      minimumDate={new Date()}
+                      accentColor={colors.accent}
+                      themeVariant={resolvedTheme}
+                    />
+                  ) : null}
+                  <Pressable
+                    style={[styles.customReminderSchedule, reminderBusy && styles.disabledControl]}
+                    onPress={() => void scheduleReminderAt(customReminderDate)}
+                    disabled={reminderBusy}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.customReminderScheduleText}>Schedule selected time</Text>
+                  </Pressable>
+                </View>
                 {currentNote?.reminderAt ? <Text style={styles.reminderMeta}>Already set for {new Date(currentNote.reminderAt).toLocaleString()}.</Text> : null}
-              </View>
+              </ScrollView>
             ) : null}
 
             {panel === 'smart' ? (
@@ -1428,7 +1643,7 @@ function makeStyles(colors: ThemeColors) {
   toolButtonActive: { backgroundColor: colors.accent },
   disabledControl: { opacity: 0.42 },
   pressed: { transform: [{ scale: 0.92 }], opacity: 0.78 },
-  paperStage: { flex: 1, position: 'relative', backgroundColor: colors.background, overflow: 'hidden' },
+  paperStage: { flex: 1, position: 'relative', backgroundColor: colors.paperStage, overflow: 'hidden' },
   editorInput: {
     position: 'absolute', top: 22, left: 26, right: 26, bottom: 54,
     color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27,
@@ -1437,8 +1652,9 @@ function makeStyles(colors: ThemeColors) {
   },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
   glyphMeasure: { position: 'absolute', left: -1000, top: -1000, opacity: 0 },
-  attachmentStrip: { position: 'absolute', top: 14, left: 24, right: 24, zIndex: 2 },
-  attachmentScroll: { gap: 8 },
+  attachmentShelf: { minHeight: 76, paddingHorizontal: 22, paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: colors.panelBorder, backgroundColor: colors.surface },
+  attachmentShelfTitle: { color: colors.muted, fontSize: 8, letterSpacing: 1.2, marginBottom: 6 },
+  attachmentShelfItems: { gap: 9, paddingRight: 12 },
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
@@ -1446,6 +1662,7 @@ function makeStyles(colors: ThemeColors) {
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
   carriage: { position: 'absolute', left: 0, top: -9, width: 58, height: 22, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  keyBulb: { position: 'absolute', top: -20, left: 21, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   typebar: { position: 'absolute', bottom: 17, left: 27, height: 35, width: 2, backgroundColor: colors.typebar, transform: [{ rotate: '4deg' }] },
   typebarTip: { position: 'absolute', bottom: 49, left: 24, width: 8, height: 5, borderRadius: 2, backgroundColor: colors.typebar, transform: [{ rotate: '15deg' }] },
   carriageDots: { flexDirection: 'row', gap: 4 },
@@ -1488,6 +1705,13 @@ function makeStyles(colors: ThemeColors) {
   switchThumbOn: { alignSelf: 'flex-end', backgroundColor: colors.switchThumb },
   settingsFootnote: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 13, marginBottom: 6 },
   reminderMeta: { color: colors.muted, fontSize: 11, paddingVertical: 10 },
+  customReminderSection: { borderTopWidth: 1, borderTopColor: colors.panelBorder, marginTop: 7, paddingTop: 11 },
+  customReminderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  customReminderText: { flex: 1 },
+  customReminderTitle: { color: colors.text, fontSize: 13 },
+  customReminderValue: { color: colors.muted, fontSize: 11, marginTop: 4 },
+  customReminderSchedule: { minHeight: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.toolbar, marginTop: 12, marginBottom: 5 },
+  customReminderScheduleText: { color: colors.inverseText, fontSize: 12, fontWeight: '500' },
   resultBox: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 14 },
   resultText: { color: colors.text, fontSize: 13, lineHeight: 20, fontFamily: 'monospace' },
   resultButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 13 },
@@ -1497,6 +1721,9 @@ function makeStyles(colors: ThemeColors) {
   resultApplyText: { color: colors.inverseText, fontSize: 12 },
   library: { flex: 1, width: '100%', maxWidth: 900, alignSelf: 'center', paddingHorizontal: 26, paddingTop: 18 },
   libraryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 26 },
+  libraryActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  settingsHomeButton: { minHeight: 40, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  settingsHomeLabel: { color: colors.secondaryText, fontSize: 11 },
   librarySubtitle: { color: colors.muted, fontSize: 12, marginTop: 5, letterSpacing: 0.3 },
   newNoteButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 18 },
   newNoteLabel: { color: colors.text, fontSize: 12 },
@@ -1521,9 +1748,19 @@ function makeStyles(colors: ThemeColors) {
   lockTitle: { color: colors.text, fontSize: 23, lineHeight: 31, textAlign: 'center', marginTop: 24 },
   lockSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, maxWidth: 310, textAlign: 'center', marginTop: 9 },
   lockError: { color: colors.danger, fontSize: 11, marginTop: 14, textAlign: 'center' },
-  lockButton: { minHeight: 48, paddingHorizontal: 22, borderRadius: 24, backgroundColor: colors.toolbar, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 25 },
-  lockButtonDisabled: { opacity: 0.62 },
-  lockButtonText: { color: colors.inverseText, fontSize: 13, letterSpacing: 0.2 },
+  pinDotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 13, marginTop: 23, marginBottom: 22 },
+  pinDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.border },
+  pinDotFilled: { backgroundColor: colors.accent, transform: [{ scale: 1.12 }] },
+  pinKeypad: { width: 270, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  pinKey: { width: 78, height: 55, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
+  pinKeyText: { color: colors.text, fontSize: 21, fontWeight: '500' },
+  pinModalBackdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 22 },
+  pinSetupCard: { width: '100%', maxWidth: 390, borderRadius: 24, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  pinSetupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pinSetupTitle: { color: colors.text, fontSize: 18, fontWeight: '500' },
+  pinSetupSubtitle: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 8, textAlign: 'center' },
+  pinCancelButton: { alignSelf: 'center', padding: 12, marginTop: 8 },
+  pinCancelText: { color: colors.muted, fontSize: 12 },
   lockFootnote: { color: colors.muted, fontSize: 10, marginTop: 18, textAlign: 'center' },
   onboardingRoot: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 28, paddingTop: 20, paddingBottom: 22 },
   onboardingTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 38 },
@@ -1552,7 +1789,17 @@ function makeStyles(colors: ThemeColors) {
   appearanceOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   appearanceOptionText: { color: colors.secondaryText, fontSize: 11 },
   appearanceOptionTextSelected: { color: colors.accentText, fontWeight: '600' },
-  settingsSection: { color: colors.muted, fontSize: 10, letterSpacing: 1.15, marginTop: 6, marginBottom: 7 },
+  settingsPage: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 10 },
+  settingsPageHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: colors.panelBorder },
+  settingsPageTitleWrap: { flex: 1 },
+  settingsPageTitle: { color: colors.text, fontSize: 20, fontWeight: '500' },
+  settingsPageSubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  settingsHeaderSpacer: { width: 32 },
+  settingsPageContent: { paddingBottom: 34 },
+  settingsSecuritySection: { marginTop: 28 },
+  changePinButton: { minHeight: 47, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.panelBorder },
+  changePinText: { color: colors.accent, fontSize: 12 },
+  settingsSection: { color: colors.muted, fontSize: 10, letterSpacing: 1.15, marginTop: 18, marginBottom: 7 },
   themeOptions: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   themeOption: { flex: 1, minHeight: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   themeOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
