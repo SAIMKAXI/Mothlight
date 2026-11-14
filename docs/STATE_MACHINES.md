@@ -17,8 +17,10 @@ The UI is rendered in `App.tsx`; pure state transitions live in `src/stateMachin
 | Reminder | `idle → requesting-permission → scheduling → scheduled` | permission and scheduling events |
 | Search | `closed / editing / found / not-found` | `OPEN`, `QUERY_CHANGED`, `FOUND`, `NOT_FOUND`, `CLOSE` |
 | Writing helper | `closed / ready(ideas or smart) / preview` |
-| Sharing | `idle / opening / shared / dismissed / failed` |
-| Delete confirmation | `idle / confirming / deleting` | `OPEN`, `PREVIEW`, `DISCARD`, `APPLY`, `CLOSE` |
+| Sharing | `idle / opening / shared / dismissed / failed` | `START`, `SHARED`, `DISMISSED`, `FAILED` |
+| Delete confirmation | `idle / confirming / deleting` | `REQUEST`, `CANCEL`, `CONFIRM`, `COMPLETE` |
+| Onboarding | `checking / active(step 0–2) / completed` | `START`, `NEXT`, `BACK`, `SKIP`, `COMPLETE` |
+| App lock | `disabled / locked / authenticating / unlocked / failed` | `ENABLE`, `STARTUP_LOCK`, `LOCK`, `AUTH_START`, `AUTH_SUCCESS`, `AUTH_FAILED`, `RETRY`, `DISABLE` |
 
 ## Transition diagrams
 
