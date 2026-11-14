@@ -7,7 +7,7 @@ The UI is rendered in `App.tsx`; pure state transitions live in `src/stateMachin
 | Flow | States | Main events |
 |---|---|---|
 | Startup | `loading → ready(stored / fresh / recovered)` | `HYDRATED` |
-| Navigation | `editor / library`, with an optional editor panel | `OPEN_EDITOR`, `OPEN_LIBRARY`, `OPEN_PANEL`, `CLOSE_PANEL` |
+| Navigation | `Home / editor / Settings`, with editor-only panels | `OPEN_LIBRARY`, `OPEN_EDITOR`, `OPEN_SETTINGS`, `OPEN_PANEL`, `CLOSE_PANEL` |
 | Toolbar | `expanded / collapsed` | `TOGGLE`, `EXPAND`, `COLLAPSE` |
 | Keyboard | `hidden / visible` | native `SHOW` and `HIDE` |
 | Typewriter | `idle → striking → idle` or `idle → carriage-returning → idle` | `KEYSTROKE`, matching `ANIMATION_FINISHED` |
@@ -20,7 +20,7 @@ The UI is rendered in `App.tsx`; pure state transitions live in `src/stateMachin
 | Sharing | `idle / opening / shared / dismissed / failed` | `START`, `SHARED`, `DISMISSED`, `FAILED` |
 | Delete confirmation | `idle / confirming / deleting` | `REQUEST`, `CANCEL`, `CONFIRM`, `COMPLETE` |
 | Onboarding | `checking / active(step 0–2) / completed` | `START`, `NEXT`, `BACK`, `SKIP`, `COMPLETE` |
-| App lock | `disabled / locked / authenticating / unlocked / failed` | `ENABLE`, `STARTUP_LOCK`, `LOCK`, `AUTH_START`, `AUTH_SUCCESS`, `AUTH_FAILED`, `RETRY`, `DISABLE` |
+| App lock | `disabled / locked / authenticating / unlocked / failed` | `ENABLE`, `STARTUP_LOCK`, `LOCK`, `AUTH_START`, `AUTH_SUCCESS`, `AUTH_FAILED`, `RETRY`, `DISABLE`; verified by the local six-digit PIN stored in SecureStore |
 
 ## Transition diagrams
 
