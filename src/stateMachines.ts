@@ -374,3 +374,19 @@ export function helperReducer(state: HelperState, event: HelperEvent): HelperSta
       return state;
   }
 }
+
+export type ToolbarState = 'expanded' | 'collapsed';
+export type ToolbarEvent = { type: 'TOGGLE' } | { type: 'EXPAND' } | { type: 'COLLAPSE' };
+
+export function toolbarReducer(state: ToolbarState, event: ToolbarEvent): ToolbarState {
+  switch (event.type) {
+    case 'TOGGLE':
+      return state === 'expanded' ? 'collapsed' : 'expanded';
+    case 'EXPAND':
+      return 'expanded';
+    case 'COLLAPSE':
+      return 'collapsed';
+    default:
+      return state;
+  }
+}
