@@ -38,6 +38,7 @@ import {
   reminderReducer,
   saveReducer,
   searchReducer,
+  typewriterReducer,
   shareReducer,
   deleteReducer,
   toolbarReducer,
