@@ -7,7 +7,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:states": "node --experimental-strip-types --test tests/stateMachines.test.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/courier-prime": "0.4.1",
