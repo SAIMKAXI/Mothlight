@@ -28,7 +28,7 @@ For a native Android development build, run `npx expo run:android`. For iOS, run
 
 The app defaults to following the system appearance. Users can choose Light or Dark in Settings; the choice is persisted locally. First-run onboarding appears once for new installations, while existing installations with stored notes are taken directly to their library/editor.
 
-App lock is optional and delegates authentication to iOS/Android through Expo LocalAuthentication. It uses device biometrics or the device passcode and does not store a separate PIN. This is an access-control screen only: notes continue to use the existing AsyncStorage store and are not encrypted at rest.
+App lock is optional and delegates authentication to iOS/Android through Expo LocalAuthentication. It uses enrolled device biometrics, with system passcode fallback where supported, and does not store a separate PIN. This is an access-control screen only: notes continue to use the existing AsyncStorage store and are not encrypted at rest.
 
 ## Privacy
 
