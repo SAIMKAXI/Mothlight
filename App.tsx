@@ -544,11 +544,14 @@ export default function App() {
       return;
     }
     try {
-      const level = await LocalAuthentication.getEnrolledLevelAsync();
-      if (level === LocalAuthentication.SecurityLevel.NONE) {
+      const [hasHardware, isEnrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      if (!hasHardware || !isEnrolled) {
         Alert.alert(
-          'Set up device security first',
-          'Mothlight uses your device passcode, pattern, fingerprint, or Face ID. Set one up in system settings before enabling the app lock.',
+          'Set up biometrics first',
+          'Enable Face ID or a fingerprint on this device before turning on Mothlight app lock.',
         );
         return;
       }
@@ -899,7 +902,7 @@ export default function App() {
             <Text style={styles.brandWordmark}>mothlight</Text>
             <Text style={styles.lockTitle}>Your quiet space, kept private.</Text>
             <Text style={styles.lockSubtitle}>
-              Unlock with the security already set up on this device.
+              Unlock with the biometrics set up on this device. Your system may offer passcode fallback.
             </Text>
             {appLockState.status === 'failed' ? (
               <Text style={styles.lockError}>{appLockState.reason}</Text>
@@ -914,7 +917,7 @@ export default function App() {
                 {appLockState.status === 'authenticating' ? 'Authenticating…' : 'Unlock Mothlight'}
               </Text>
             </Pressable>
-            <Text style={styles.lockFootnote}>Uses Face ID, fingerprint, or your device passcode.</Text>
+            <Text style={styles.lockFootnote}>Uses Face ID or fingerprint, with system passcode fallback where supported.</Text>
           </View>
         </SafeAreaView>
       </ThemeContext.Provider>
