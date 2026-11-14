@@ -424,7 +424,8 @@ export default function App() {
   useEffect(() => {
     let previousState = AppState.currentState;
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (previousState === 'active' && nextState === 'background') {
+      if (nextState === 'background' && appBackgroundAtRef.current === null) {
+        // iOS may emit "inactive" before "background"; timestamp the actual departure.
         appBackgroundAtRef.current = Date.now();
       }
       if (nextState === 'active' && appBackgroundAtRef.current !== null) {
