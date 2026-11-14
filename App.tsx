@@ -22,7 +22,7 @@ import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 
 const NOTES_KEY = 'mothlight.notes.v1';
 const SETTINGS_KEY = 'mothlight.settings.v1';
-const MAX_CHARS = 3000;
+const MAX_CHARS = 6000;
 const PAPER = '#D4D0CD';
 const INK = '#29272A';
 const MUTED = '#777277';
