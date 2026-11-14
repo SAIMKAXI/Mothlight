@@ -1019,8 +1019,9 @@ export default function App() {
 
   if (screen === 'library') {
     return (
+      <ThemeContext.Provider value={themeContextValue}>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
         <View style={styles.library}>
           <View style={styles.libraryHeader}>
             <View>
@@ -1051,7 +1052,7 @@ export default function App() {
                     <Text numberOfLines={2} style={styles.noteRowPreview}>{item.content || 'An empty page, ready when you are.'}</Text>
                     <Text style={styles.noteRowDate}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text>
                   </View>
-                  <ChevronRight size={18} color="#8E898A" />
+                  <ChevronRight size={18} color={colors.iconMuted} />
                 </Pressable>
               )}
             />
@@ -1061,10 +1062,12 @@ export default function App() {
           </View>
         </View>
       </SafeAreaView>
+      </ThemeContext.Provider>
     );
   }
 
   return (
+    <ThemeContext.Provider value={themeContextValue}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
       <KeyboardAvoidingView style={styles.keyboardShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -1092,12 +1095,12 @@ export default function App() {
               spellCheck
               autoCapitalize="sentences"
               keyboardType="default"
-              keyboardAppearance="dark"
+              keyboardAppearance={resolvedTheme === 'dark' ? 'dark' : 'light'}
               returnKeyType="default"
               placeholder="Begin anywhere..."
-              placeholderTextColor="#8A8584"
-              selectionColor="#777477"
-              cursorColor={INK}
+              placeholderTextColor={colors.muted}
+              selectionColor={colors.iconMuted}
+              cursorColor={colors.text}
               textAlignVertical="bottom"
               scrollEnabled
               underlineColorAndroid="transparent"
@@ -1111,7 +1114,7 @@ export default function App() {
                     <View key={attachment.id} style={styles.attachmentItem}>
                       <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
                       <Pressable onPress={() => removeAttachment(attachment.id)} style={styles.attachmentRemove}>
-                        <X size={12} color="#F4F0EC" />
+                        <X size={12} color={colors.toolbarText} />
                       </Pressable>
                     </View>
                   ))}
@@ -1158,8 +1161,8 @@ export default function App() {
               ) : null}
               <View style={styles.toolbarEndMark}>
                 {saveState.status === 'saved'
-                  ? <Check size={15} color={SAGE} />
-                  : <View style={[styles.toolbarEndDot, saveState.status === 'error' && { backgroundColor: '#B66D62' }]} />}
+                  ? <Check size={15} color={colors.accent} />
+                  : <View style={[styles.toolbarEndDot, saveState.status === 'error' && { backgroundColor: colors.danger }]} />}
               </View>
             </View>
           </View>
@@ -1173,7 +1176,7 @@ export default function App() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{panelTitle}</Text>
-              <Pressable onPress={() => setPanel(null)} hitSlop={8}><X size={19} color="#706B6D" /></Pressable>
+              <Pressable onPress={() => setPanel(null)} hitSlop={8}><X size={19} color={colors.iconMuted} /></Pressable>
             </View>
 
             {panel === 'ideas' ? (
@@ -1195,13 +1198,13 @@ export default function App() {
             {panel === 'search' ? (
               <View>
                 <View style={styles.searchInputWrap}>
-                  <Search size={17} color="#777277" />
+                  <Search size={17} color={colors.iconMuted} />
                   <TextInput
                     ref={searchRef}
                     value={searchText}
                     onChangeText={setSearchText}
                     placeholder="Find a word or phrase"
-                    placeholderTextColor="#999294"
+                    placeholderTextColor={colors.muted}
                     style={styles.searchInput}
                     returnKeyType="search"
                     onSubmitEditing={findNext}
@@ -1211,7 +1214,7 @@ export default function App() {
                 </View>
                 <Pressable style={styles.primaryPanelButton} onPress={findNext}>
                   <Text style={styles.primaryPanelButtonText}>Find next match</Text>
-                  <Search size={16} color="#F1EFEA" />
+                  <Search size={16} color={colors.inverseText} />
                 </Pressable>
               </View>
             ) : null}
@@ -1219,28 +1222,69 @@ export default function App() {
             {panel === 'format' ? (
               <View>
                 <View style={styles.formatGrid}>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color="#5C6658" /><Text style={styles.formatLabel}>Heading</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('· ')}><List size={18} color="#5C6658" /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color="#5C6658" /><Text style={styles.formatLabel}>Quote</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')}><Bold size={18} color="#5C6658" /><Text style={styles.formatLabel}>Divider</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('· ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')}><Bold size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
                 <View style={styles.undoRow}>
-                  <Pressable style={styles.undoButton} onPress={undo}><Undo2 size={16} color="#5C6658" /><Text style={styles.undoText}>Undo</Text></Pressable>
-                  <Pressable style={styles.undoButton} onPress={redo}><Redo2 size={16} color="#5C6658" /><Text style={styles.undoText}>Redo</Text></Pressable>
+                  <Pressable style={styles.undoButton} onPress={undo}><Undo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Undo</Text></Pressable>
+                  <Pressable style={styles.undoButton} onPress={redo}><Redo2 size={16} color={colors.icon} /><Text style={styles.undoText}>Redo</Text></Pressable>
                 </View>
               </View>
             ) : null}
 
             {panel === 'settings' ? (
               <View>
-                <ToggleRow icon={settings.typewriterSound ? Volume2 : VolumeX} title="Typewriter sounds" subtitle="Soft mechanical clicks while you write." value={settings.typewriterSound} onChange={(value) => setSettingsValue({ typewriterSound: value })} />
-                <ToggleRow icon={Vibrate} title="System haptics" subtitle="Use gentle native touch feedback." value={settings.haptics} onChange={(value) => setSettingsValue({ haptics: value })} />
+                <Text style={styles.settingsSection}>Appearance</Text>
+                <View style={styles.themeOptions}>
+                  {([
+                    { value: 'system', label: 'System' },
+                    { value: 'light', label: 'Light' },
+                    { value: 'dark', label: 'Dark' },
+                  ] as const).map((option) => (
+                    <Pressable
+                      key={option.value}
+                      onPress={() => setSettingsValue({ themeMode: option.value })}
+                      style={[styles.themeOption, settings.themeMode === option.value && styles.themeOptionSelected]}
+                    >
+                      <Text style={[
+                        styles.themeOptionText,
+                        settings.themeMode === option.value && styles.themeOptionTextSelected,
+                      ]}>{option.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <ToggleRow
+                  icon={settings.typewriterSound ? Volume2 : VolumeX}
+                  title="Typewriter sounds"
+                  subtitle="Soft mechanical clicks while you write."
+                  value={settings.typewriterSound}
+                  onChange={(value) => setSettingsValue({ typewriterSound: value })}
+                />
+                <ToggleRow
+                  icon={Vibrate}
+                  title="System haptics"
+                  subtitle="Use gentle native touch feedback."
+                  value={settings.haptics}
+                  onChange={(value) => setSettingsValue({ haptics: value })}
+                />
+                <ToggleRow
+                  icon={LockKeyhole}
+                  title="App lock (optional)"
+                  subtitle="Require device authentication when you return."
+                  value={settings.appLockEnabled}
+                  onChange={(value) => { void setAppLockEnabled(value); }}
+                />
                 <Text style={styles.settingsFootnote}>
                   {settingsSaveState.status === 'error'
                     ? 'Your preferences could not be saved. They may reset when the app closes.'
                     : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
                       ? 'Saving your preferences...'
-                      : 'Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
+                      : 'Appearance follows your system choice by default. Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
+                </Text>
+                <Text style={styles.settingsSecurityFootnote}>
+                  App lock gates access to the app; it does not encrypt notes stored on this device.
                 </Text>
               </View>
             ) : null}
@@ -1291,6 +1335,7 @@ export default function App() {
         </View>
       </Modal>
     </SafeAreaView>
+    </ThemeContext.Provider>
   );
 }
 
