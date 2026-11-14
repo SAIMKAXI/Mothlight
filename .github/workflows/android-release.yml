@@ -1,0 +1,123 @@
+name: Android Preview Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "App.tsx"
+      - "app.json"
+      - "package.json"
+      - "src/**"
+      - "assets/**"
+      - "babel.config.js"
+      - "tsconfig.json"
+      - ".github/workflows/android-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mothlight-android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-android:
+    name: Build installable Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37 toolchain
+        run: |
+          sdkmanager --install \
+            "platforms;android-37" \
+            "build-tools;37.0.0" \
+            "ndk;27.1.12297006" \
+            "cmake;3.22.1"
+
+      - name: Install JavaScript dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Expo dependencies
+        run: npx expo install --check
+
+      - name: TypeScript checks
+        run: npm run typecheck
+
+      - name: State-machine tests
+        run: npm run test:states
+
+      - name: Validate app version
+        id: version
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          EXPO_VERSION="$(node -p "require('./app.json').expo.version")"
+          if [ "$PACKAGE_VERSION" != "$EXPO_VERSION" ]; then
+            echo "Version mismatch: package.json=$PACKAGE_VERSION app.json=$EXPO_VERSION"
+            exit 1
+          fi
+          echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$PACKAGE_VERSION" >/dev/null 2>&1; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Build debug-signed APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Prepare downloadable APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Mothlight-v${{ steps.version.outputs.version }}-Android.apk"
+          ls -lh dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mothlight-v${{ steps.version.outputs.version }}-Android-APK
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.tag_exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Mothlight v${{ steps.version.outputs.version }}
+          prerelease: true
+          make_latest: false
+          files: dist/*.apk
+          fail_on_unmatched_files: true
+          body: |
+            ## Mothlight Android preview
+
+            This release contains the installable Android APK for Mothlight v${{ steps.version.outputs.version }}.
+
+            **Signing:** This preview APK is signed automatically with the standard Android debug certificate generated on the build runner. No custom Android release keystore or Play Store signing setup is used.
+
+            **Distribution:** Intended for direct testing and installation. This is a preview build, not a Google Play production release. Notes and settings remain stored locally on the device.
