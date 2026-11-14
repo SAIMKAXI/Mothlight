@@ -1,6 +1,6 @@
 {
   "name": "mothlight",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -9,7 +9,9 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "test:states": "node --experimental-strip-types --test tests/stateMachines.test.mjs",
-    "generate:brand-assets": "python scripts/generate_brand_assets.py"
+    "generate:brand-assets": "python scripts/generate_brand_assets.py",
+    "test:all": "node --experimental-strip-types --test tests/stateMachines.test.mjs tests/editorMetrics.test.mjs tests/noteModel.test.mjs tests/notificationRouting.test.mjs tests/interactionWiring.test.mjs",
+    "audit:interactions": "node scripts/audit-interactions.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/courier-prime": "0.4.1",
