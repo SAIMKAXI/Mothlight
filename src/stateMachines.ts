@@ -390,3 +390,48 @@ export function toolbarReducer(state: ToolbarState, event: ToolbarEvent): Toolba
       return state;
   }
 }
+
+
+export type ShareState = 'idle' | 'opening' | 'shared' | 'dismissed' | 'failed';
+export type ShareEvent =
+  | { type: 'START' }
+  | { type: 'SHARED' }
+  | { type: 'DISMISSED' }
+  | { type: 'FAILED' };
+
+export function shareReducer(state: ShareState, event: ShareEvent): ShareState {
+  switch (event.type) {
+    case 'START':
+      return state === 'opening' ? state : 'opening';
+    case 'SHARED':
+      return state === 'opening' ? 'shared' : state;
+    case 'DISMISSED':
+      return state === 'opening' ? 'dismissed' : state;
+    case 'FAILED':
+      return state === 'opening' ? 'failed' : state;
+    default:
+      return state;
+  }
+}
+
+export type DeleteState = 'idle' | 'confirming' | 'deleting';
+export type DeleteEvent =
+  | { type: 'REQUEST' }
+  | { type: 'CANCEL' }
+  | { type: 'CONFIRM' }
+  | { type: 'COMPLETE' };
+
+export function deleteReducer(state: DeleteState, event: DeleteEvent): DeleteState {
+  switch (event.type) {
+    case 'REQUEST':
+      return state === 'idle' ? 'confirming' : state;
+    case 'CANCEL':
+      return state === 'confirming' ? 'idle' : state;
+    case 'CONFIRM':
+      return state === 'confirming' ? 'deleting' : state;
+    case 'COMPLETE':
+      return state === 'deleting' ? 'idle' : state;
+    default:
+      return state;
+  }
+}
