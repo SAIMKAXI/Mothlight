@@ -18,7 +18,9 @@ jobs:
         run: npm install
       - name: Check Expo dependency compatibility
         run: npx expo install --check
-      - name: TypeScript
+      - name: Audit interactive control wiring
+        run: npm run audit:interactions
+      - name: TypeScript and dead-code checks
         run: npm run typecheck
-      - name: State machine tests
-        run: npm run test:states
+      - name: Complete regression suite
+        run: npm run test:all
