@@ -13,7 +13,7 @@ For a native Android development build, run `npx expo run:android`. For iOS, run
 
 ## Included
 
-- 3,000-character editor with a live counter and local autosave.
+- 6,000-character editor with a live counter and local autosave.
 - Courier Prime typewriter typography on a warm paper surface.
 - A mechanical rail, two-dot sliding carriage and striking typebar driven by the native cursor selection and measured monospaced glyph width.
 - Quiet typewriter audio variations for normal keys, spaces, backspace and carriage return, plus independent sound and haptic settings.
@@ -28,3 +28,9 @@ Notes, settings and compressed image attachments are stored locally using AsyncS
 ## Reference palette
 
 Paper `#D4D0CD` · secondary `#BDB9B8` · toolbar `#777477` · keyboard `#373538` · key surface `#AAA7AC` · ink `#29272A` · sage `#C2D3A9`.
+
+## Explicit state machines
+
+Interactive and asynchronous flows are modeled in `src/stateMachines.ts` and consumed by the app through reducers. The models define allowed transitions for startup recovery, navigation and panels, keyboard visibility, toolbar expansion, editor history, typewriter strikes, autosave revisions, image attachments, reminders, in-note search, and writing-helper previews.
+
+Pure transition tests run with `npm run test:states`. The CI workflow runs those tests in addition to Expo dependency validation and TypeScript checks. See [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) for state diagrams and invariants.
