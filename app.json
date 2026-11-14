@@ -3,7 +3,7 @@
     "name": "Mothlight",
     "slug": "mothlight",
     "scheme": "mothlight",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "dev.saimkazi.mothlight",
-      "versionCode": 4,
+      "versionCode": 5,
       "resizeableActivity": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
@@ -30,14 +30,8 @@
           "backgroundColor": "#D4D0CD",
           "dark": {
             "image": "./assets/mothlight-icon-dark.png",
-            "backgroundColor": "#1D2121"
+            "backgroundColor": "#343A3D"
           }
-        }
-      ],
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "Mothlight uses Face ID to unlock your private writing space."
         }
       ],
       [
@@ -53,7 +47,8 @@
         {
           "color": "#C2D3A9"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "icon": "./assets/mothlight-icon.png"
   }
