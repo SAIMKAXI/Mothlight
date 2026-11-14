@@ -29,15 +29,16 @@ import {
   typewriterReducer,
 } from '../src/stateMachines.ts';
 
-test('navigation never leaves a panel open behind the library', () => {
-  const editor = navigationReducer(initialNavigationState, { type: 'OPEN_PANEL', panel: 'settings' });
-  assert.deepEqual(editor, { screen: 'editor', panel: 'settings' });
-  const library = navigationReducer(editor, { type: 'OPEN_LIBRARY' });
-  assert.deepEqual(library, { screen: 'library', panel: null });
-  assert.deepEqual(
-    navigationReducer(library, { type: 'OPEN_PANEL', panel: 'search' }),
-    library,
-  );
+test('app opens on Home and Settings is a standalone screen, never an editor panel', () => {
+  assert.deepEqual(initialNavigationState, { screen: 'library', panel: null });
+  const editor = navigationReducer(initialNavigationState, { type: 'OPEN_EDITOR' });
+  assert.deepEqual(editor, { screen: 'editor', panel: null });
+  const panel = navigationReducer(editor, { type: 'OPEN_PANEL', panel: 'search' });
+  assert.deepEqual(panel, { screen: 'editor', panel: 'search' });
+  const home = navigationReducer(panel, { type: 'OPEN_LIBRARY' });
+  assert.deepEqual(home, { screen: 'library', panel: null });
+  assert.deepEqual(navigationReducer(home, { type: 'OPEN_PANEL', panel: 'search' }), home);
+  assert.deepEqual(navigationReducer(home, { type: 'OPEN_SETTINGS' }), { screen: 'settings', panel: null });
 });
 
 test('keyboard visibility follows native show and hide events', () => {
@@ -170,7 +171,7 @@ test('first-run onboarding progresses, moves back, and completes', () => {
   assert.deepEqual(state, { status: 'completed' });
 });
 
-test('app lock requires a native authentication result before unlocking', () => {
+test('app lock requires the app PIN verifier result before unlocking', () => {
   let state = appLockReducer(initialAppLockState, { type: 'STARTUP_LOCK' });
   assert.deepEqual(state, { status: 'locked' });
   assert.deepEqual(appLockReducer(state, { type: 'AUTH_SUCCESS' }), state);
