@@ -556,16 +556,17 @@ function AppContent() {
     if (kind === 'none' || kind === 'paste') return;
     if (settings.typewriterSound) {
       try {
-        clickPlayer.volume = kind === 'return' ? 0.2 : kind === 'space' ? 0.1 : 0.14;
-        clickPlayer.playbackRate = kind === 'return' ? 0.72 : kind === 'space' ? 0.82 : kind === 'backspace' ? 1.24 : 1;
-        clickPlayer.seekTo(0);
-        clickPlayer.play();
-      } catch { /* Audio is optional when the device has no output route. */ }
+        const player = kind === 'return' ? returnPlayer : clickPlayer;
+        player.volume = kind === 'return' ? 0.62 : kind === 'space' ? 0.38 : kind === 'backspace' ? 0.48 : 0.58;
+        player.playbackRate = kind === 'return' ? 0.92 : kind === 'space' ? 0.88 : kind === 'backspace' ? 1.18 : 1;
+        player.seekTo(0);
+        player.play();
+      } catch { /* Sound is optional when the device has no output route. */ }
     }
     if (settings.haptics) {
       void Haptics.impactAsync(kind === 'return' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
-  }, [settings, clickPlayer]);
+  }, [settings.typewriterSound, settings.haptics, clickPlayer, returnPlayer]);
 
   const handleTextChange = useCallback((nextValue: string) => {
     if (!currentNote) return;
@@ -1491,7 +1492,7 @@ function AppContent() {
             ) : null}
 
             {panel === 'reminder' ? (
-              <View>
+              <ScrollView keyboardShouldPersistTaps="handled">
                 <Text style={styles.sheetIntro}>Choose a quick reminder or select an exact date and time.</Text>
                 <PanelAction icon={Bell} title="In 10 minutes" detail="A gentle nudge, soon." onPress={() => scheduleReminder(10)} disabled={reminderBusy} />
                 <PanelAction icon={Clock3} title="In 1 hour" detail="Return to this thought later." onPress={() => scheduleReminder(60)} disabled={reminderBusy} />
@@ -1512,7 +1513,10 @@ function AppContent() {
                   {customReminderOpen ? (
                     <DateTimePicker
                       value={customReminderDate}
-                      onValueChange={(_, selectedDate) => setCustomReminderDate(selectedDate)}
+                      onValueChange={(_, selectedDate) => {
+                        setCustomReminderDate(selectedDate);
+                        if (Platform.OS === 'android') setCustomReminderOpen(false);
+                      }}
                       onDismiss={() => setCustomReminderOpen(false)}
                       mode="datetime"
                       presentation={Platform.OS === 'android' ? 'dialog' : 'inline'}
@@ -1531,7 +1535,7 @@ function AppContent() {
                   </Pressable>
                 </View>
                 {currentNote?.reminderAt ? <Text style={styles.reminderMeta}>Already set for {new Date(currentNote.reminderAt).toLocaleString()}.</Text> : null}
-              </View>
+              </ScrollView>
             ) : null}
 
             {panel === 'smart' ? (
@@ -1599,7 +1603,7 @@ function makeStyles(colors: ThemeColors) {
   toolButtonActive: { backgroundColor: colors.accent },
   disabledControl: { opacity: 0.42 },
   pressed: { transform: [{ scale: 0.92 }], opacity: 0.78 },
-  paperStage: { flex: 1, position: 'relative', backgroundColor: colors.background, overflow: 'hidden' },
+  paperStage: { flex: 1, position: 'relative', backgroundColor: colors.paperStage, overflow: 'hidden' },
   editorInput: {
     position: 'absolute', top: 22, left: 26, right: 26, bottom: 54,
     color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27,
@@ -1608,8 +1612,9 @@ function makeStyles(colors: ThemeColors) {
   },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
   glyphMeasure: { position: 'absolute', left: -1000, top: -1000, opacity: 0 },
-  attachmentStrip: { position: 'absolute', top: 14, left: 24, right: 24, zIndex: 2 },
-  attachmentScroll: { gap: 8 },
+  attachmentShelf: { minHeight: 76, paddingHorizontal: 22, paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: colors.panelBorder, backgroundColor: colors.surface },
+  attachmentShelfTitle: { color: colors.muted, fontSize: 8, letterSpacing: 1.2, marginBottom: 6 },
+  attachmentShelfItems: { gap: 9, paddingRight: 12 },
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
@@ -1617,6 +1622,7 @@ function makeStyles(colors: ThemeColors) {
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
   carriage: { position: 'absolute', left: 0, top: -9, width: 58, height: 22, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  keyBulb: { position: 'absolute', top: -20, left: 21, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   typebar: { position: 'absolute', bottom: 17, left: 27, height: 35, width: 2, backgroundColor: colors.typebar, transform: [{ rotate: '4deg' }] },
   typebarTip: { position: 'absolute', bottom: 49, left: 24, width: 8, height: 5, borderRadius: 2, backgroundColor: colors.typebar, transform: [{ rotate: '15deg' }] },
   carriageDots: { flexDirection: 'row', gap: 4 },
@@ -1659,6 +1665,13 @@ function makeStyles(colors: ThemeColors) {
   switchThumbOn: { alignSelf: 'flex-end', backgroundColor: colors.switchThumb },
   settingsFootnote: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 13, marginBottom: 6 },
   reminderMeta: { color: colors.muted, fontSize: 11, paddingVertical: 10 },
+  customReminderSection: { borderTopWidth: 1, borderTopColor: colors.panelBorder, marginTop: 7, paddingTop: 11 },
+  customReminderToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
+  customReminderText: { flex: 1 },
+  customReminderTitle: { color: colors.text, fontSize: 13 },
+  customReminderValue: { color: colors.muted, fontSize: 11, marginTop: 4 },
+  customReminderSchedule: { minHeight: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: colors.toolbar, marginTop: 12, marginBottom: 5 },
+  customReminderScheduleText: { color: colors.inverseText, fontSize: 12, fontWeight: '500' },
   resultBox: { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: 14, padding: 14 },
   resultText: { color: colors.text, fontSize: 13, lineHeight: 20, fontFamily: 'monospace' },
   resultButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 13 },
@@ -1668,6 +1681,9 @@ function makeStyles(colors: ThemeColors) {
   resultApplyText: { color: colors.inverseText, fontSize: 12 },
   library: { flex: 1, width: '100%', maxWidth: 900, alignSelf: 'center', paddingHorizontal: 26, paddingTop: 18 },
   libraryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 26 },
+  libraryActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  settingsHomeButton: { minHeight: 40, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  settingsHomeLabel: { color: colors.secondaryText, fontSize: 11 },
   librarySubtitle: { color: colors.muted, fontSize: 12, marginTop: 5, letterSpacing: 0.3 },
   newNoteButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 18 },
   newNoteLabel: { color: colors.text, fontSize: 12 },
@@ -1692,10 +1708,20 @@ function makeStyles(colors: ThemeColors) {
   lockTitle: { color: colors.text, fontSize: 23, lineHeight: 31, textAlign: 'center', marginTop: 24 },
   lockSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 20, maxWidth: 310, textAlign: 'center', marginTop: 9 },
   lockError: { color: colors.danger, fontSize: 11, marginTop: 14, textAlign: 'center' },
-  lockButton: { minHeight: 48, paddingHorizontal: 22, borderRadius: 24, backgroundColor: colors.toolbar, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 25 },
-  lockButtonDisabled: { opacity: 0.62 },
-  lockButtonText: { color: colors.inverseText, fontSize: 13, letterSpacing: 0.2 },
-  lockFootnote: { color: colors.muted, fontSize: 10, marginTop: 18, textAlign: 'center' },
+  pinDotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 13, marginTop: 23, marginBottom: 22 },
+  pinDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.border },
+  pinDotFilled: { backgroundColor: colors.accent, transform: [{ scale: 1.12 }] },
+  pinKeypad: { width: 270, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  pinKey: { width: 78, height: 55, borderRadius: 18, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
+  pinKeyText: { color: colors.text, fontSize: 21, fontWeight: '500' },
+  pinModalBackdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 22 },
+  pinSetupCard: { width: '100%', maxWidth: 390, borderRadius: 24, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  pinSetupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pinSetupTitle: { color: colors.text, fontSize: 18, fontWeight: '500' },
+  pinSetupSubtitle: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 8, textAlign: 'center' },
+  pinCancelButton: { alignSelf: 'center', padding: 12, marginTop: 8 },
+  pinCancelText: { color: colors.muted, fontSize: 12 },
+  pinFootnote: { color: colors.muted, fontSize: 10, marginTop: 18, textAlign: 'center' },
   onboardingRoot: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 28, paddingTop: 20, paddingBottom: 22 },
   onboardingTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 38 },
   onboardingKicker: { color: colors.muted, fontSize: 9, letterSpacing: 1.35 },
@@ -1723,7 +1749,17 @@ function makeStyles(colors: ThemeColors) {
   appearanceOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
   appearanceOptionText: { color: colors.secondaryText, fontSize: 11 },
   appearanceOptionTextSelected: { color: colors.accentText, fontWeight: '600' },
-  settingsSection: { color: colors.muted, fontSize: 10, letterSpacing: 1.15, marginTop: 6, marginBottom: 7 },
+  settingsPage: { flex: 1, width: '100%', maxWidth: 760, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 10 },
+  settingsPageHeader: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: 1, borderBottomColor: colors.panelBorder },
+  settingsPageTitleWrap: { flex: 1 },
+  settingsPageTitle: { color: colors.text, fontSize: 20, fontWeight: '500' },
+  settingsPageSubtitle: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  settingsHeaderSpacer: { width: 32 },
+  settingsPageContent: { paddingBottom: 34 },
+  settingsSecuritySection: { marginTop: 28 },
+  changePinButton: { minHeight: 47, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.panelBorder },
+  changePinText: { color: colors.accent, fontSize: 12 },
+  settingsSection: { color: colors.muted, fontSize: 10, letterSpacing: 1.15, marginTop: 18, marginBottom: 7 },
   themeOptions: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   themeOption: { flex: 1, minHeight: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
   themeOptionSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
