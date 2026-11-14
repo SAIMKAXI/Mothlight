@@ -586,43 +586,87 @@ function AppContent() {
 
   const setAppLockEnabled = async (enabled: boolean) => {
     if (!enabled) {
-      setSettingsValue({ appLockEnabled: false });
-      dispatchAppLock({ type: 'DISABLE' });
-      appLockAttemptedRef.current = false;
+      Alert.alert('Disable PIN lock?', 'Mothlight will stop asking for your six-digit app PIN.', [
+        { text: 'Keep enabled', style: 'cancel' },
+        {
+          text: 'Disable lock',
+          style: 'destructive',
+          onPress: () => {
+            void SecureStore.deleteItemAsync(PIN_STORAGE_KEY).catch(() => undefined);
+            setStoredPin(null);
+            setSettingsValue({ appLockEnabled: false });
+            dispatchAppLock({ type: 'DISABLE' });
+            setPinEntry('');
+            setPinError(null);
+          },
+        },
+      ]);
       return;
     }
+    setPinEntry('');
+    setPinSetupDraft('');
+    setPinError(null);
+    setPinSetupStep('create');
+  };
+
+  const processPin = async (value: string) => {
+    if (!isValidPin(value) || pinBusy) return;
+    setPinBusy(true);
     try {
-      const [hasHardware, isEnrolled] = await Promise.all([
-        LocalAuthentication.hasHardwareAsync(),
-        LocalAuthentication.isEnrolledAsync(),
-      ]);
-      if (!hasHardware || !isEnrolled) {
-        Alert.alert(
-          'Set up biometrics first',
-          'Enable Face ID or a fingerprint on this device before turning on Mothlight app lock.',
-        );
+      if (pinSetupStep === 'create') {
+        setPinSetupDraft(value);
+        setPinEntry('');
+        setPinError(null);
+        setPinSetupStep('confirm');
         return;
       }
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Confirm to enable Mothlight lock',
-        cancelLabel: 'Cancel',
-        fallbackLabel: 'Use device passcode',
-        disableDeviceFallback: false,
-      });
-      if (!result.success) {
-        Alert.alert('App lock not enabled', 'Your device could not confirm your identity.');
+      if (pinSetupStep === 'confirm') {
+        if (value !== pinSetupDraft) {
+          setPinEntry('');
+          setPinSetupDraft('');
+          setPinSetupStep('create');
+          setPinError('The PINs did not match. Please start again.');
+          return;
+        }
+        await SecureStore.setItemAsync(PIN_STORAGE_KEY, value);
+        setStoredPin(value);
+        setSettingsValue({ appLockEnabled: true });
+        dispatchAppLock({ type: 'ENABLE' });
+        setPinSetupStep(null);
+        setPinSetupDraft('');
+        setPinEntry('');
+        setPinError(null);
         return;
       }
-      setSettingsValue({ appLockEnabled: true });
-      dispatchAppLock({ type: 'ENABLE' });
+      dispatchAppLock({ type: 'AUTH_START' });
+      const savedPin = storedPin ?? await SecureStore.getItemAsync(PIN_STORAGE_KEY);
+      if (savedPin && savedPin === value) {
+        setPinError(null);
+        dispatchAppLock({ type: 'AUTH_SUCCESS' });
+      } else {
+        setPinError('That PIN is not correct. Try again.');
+        dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Incorrect PIN.' });
+      }
+      setPinEntry('');
     } catch {
-      Alert.alert('App lock unavailable', 'Mothlight could not access device authentication.');
+      setPinError('Secure PIN storage is unavailable. Please try again.');
+      if (appLockState.status !== 'unlocked') {
+        dispatchAppLock({ type: 'AUTH_FAILED', reason: 'Could not verify the app PIN.' });
+      }
+    } finally {
+      setPinBusy(false);
     }
   };
 
-  const retryUnlock = () => {
-    appLockAttemptedRef.current = false;
-    dispatchAppLock({ type: 'RETRY' });
+  const handlePinDigit = (digit: string) => {
+    if (pinBusy) return;
+    const next = appendPinDigit(pinEntry, digit);
+    setPinEntry(next);
+    if (next.length === PIN_LENGTH) void processPin(next);
+  };
+
+  const handlePinBackspace = () => {
+    if (!pinBusy) setPinEntry((current) => removePinDigit(current));
   };
 
   const completeOnboarding = async () => {
@@ -753,9 +797,13 @@ function AppContent() {
     setSelection({ start: copy.content.length, end: copy.content.length });
   };
 
-  const scheduleReminder = async (minutes: number) => {
+  const scheduleReminderAt = async (fireAt: Date) => {
     if (!currentNote || reminderState.status === 'requesting-permission' ||
         reminderState.status === 'scheduling') return;
+    if (!Number.isFinite(fireAt.getTime()) || fireAt.getTime() <= Date.now()) {
+      Alert.alert('Choose a future time', 'The reminder time must be later than now.');
+      return;
+    }
     dispatchReminder({ type: 'START' });
     try {
       const permission = await Notifications.requestPermissionsAsync();
@@ -768,7 +816,6 @@ function AppContent() {
       if (currentNote.reminderId) {
         await Notifications.cancelScheduledNotificationAsync(currentNote.reminderId).catch(() => undefined);
       }
-      const fireAt = new Date(Date.now() + minutes * 60_000);
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: getTitle(currentNote),
@@ -779,8 +826,9 @@ function AppContent() {
       });
       updateNote(currentNote.id, { reminderId: id, reminderAt: fireAt.getTime() });
       dispatchReminder({ type: 'SCHEDULED', notificationId: id, fireAt: fireAt.getTime() });
+      setCustomReminderOpen(false);
       setPanel(null);
-      Alert.alert('Reminder set', 'Mothlight will gently remind you ' + (minutes < 60 ? 'in ' + minutes + ' minutes.' : minutes < 1440 ? 'in ' + Math.round(minutes / 60) + ' hour(s).' : 'tomorrow.'));
+      Alert.alert('Reminder set', 'Mothlight will remind you on ' + fireAt.toLocaleString() + '.');
     } catch (error) {
       dispatchReminder({
         type: 'FAILED',
@@ -790,74 +838,36 @@ function AppContent() {
     }
   };
 
-  const insertAtSelection = (replacement: string, caretOffset = replacement.length) => {
+  const scheduleReminder = (minutes: number) => {
+    void scheduleReminderAt(new Date(Date.now() + minutes * 60_000));
+  };
+
+  const focusEditorAt = (nextSelection: { start: number; end: number }) => {
+    setTimeout(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setNativeProps({ selection: nextSelection });
+    }, 220);
+  };
+
+  const insertAtSelection = (replacement: string) => {
     if (!currentNote) return;
-    const start = Math.min(selection.start, selection.end);
-    const end = Math.max(selection.start, selection.end);
-    const next = (content.slice(0, start) + replacement + content.slice(end)).slice(0, MAX_CHARS);
+    const result = insertTextAtSelection(content, selection, replacement, MAX_CHARS);
     dispatchHistory({ type: 'RECORD', value: content });
-    updateNote(currentNote.id, { content: next });
-    const caret = Math.min(next.length, start + caretOffset);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
+    updateNote(currentNote.id, { content: result.text });
+    setSelection(result.selection);
     setPanel(null);
+    focusEditorAt(result.selection);
   };
 
-  const applyPrefix = (prefix: string, suffix = '') => {
-    const start = Math.min(selection.start, selection.end);
-    const end = Math.max(selection.start, selection.end);
-    if (start === end && currentNote) {
-      const lineStart = content.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-      const next = (content.slice(0, lineStart) + prefix + content.slice(lineStart)).slice(0, MAX_CHARS);
-      dispatchHistory({ type: 'RECORD', value: content });
-      updateNote(currentNote.id, { content: next });
-      const caret = Math.min(next.length, start + prefix.length);
-      setSelection({ start: caret, end: caret });
-      requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
-      setPanel(null);
-      return;
-    }
-    const selected = content.slice(start, end);
-    const formatted = selected.split('\n').map((line) => prefix + line).join('\n') + suffix;
-    insertAtSelection(formatted, formatted.length);
-  };
-
-  const undo = () => {
-    if (!currentNote || !history.undo.length) return;
-    const target = history.undo[history.undo.length - 1];
-    dispatchHistory({ type: 'UNDO', current: content });
-    updateNote(currentNote.id, { content: target });
-    const caret = Math.min(selection.start, target.length);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
-  };
-
-  const redo = () => {
-    if (!currentNote || !history.redo.length) return;
-    const target = history.redo[history.redo.length - 1];
-    dispatchHistory({ type: 'REDO', current: content });
-    updateNote(currentNote.id, { content: target });
-    const caret = Math.min(selection.start, target.length);
-    setSelection({ start: caret, end: caret });
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: { start: caret, end: caret } }));
-  };
-
-  const findNext = () => {
-    if (!searchText.trim() || !currentNote) return;
-    const needle = searchText.toLocaleLowerCase();
-    const haystack = content.toLocaleLowerCase();
-    const from = selection.end >= content.length ? 0 : Math.max(selection.end, 0);
-    let index = haystack.indexOf(needle, from);
-    if (index < 0) index = haystack.indexOf(needle, 0);
-    if (index < 0) {
-      dispatchSearch({ type: 'NOT_FOUND', query: searchText });
-      Alert.alert('No match found', 'That phrase is not in this note.');
-      return;
-    }
-    dispatchSearch({ type: 'FOUND', query: searchText, start: index, end: index + needle.length });
-    const nextSelection = { start: index, end: index + needle.length };
-    setSelection(nextSelection);
-    requestAnimationFrame(() => editorRef.current?.setNativeProps({ selection: nextSelection }));
+  const applyPrefix = (prefix: string) => {
+    if (!currentNote) return;
+    const result = toggleLinePrefix(content, selection, prefix);
+    if (result.text === content) return;
+    dispatchHistory({ type: 'RECORD', value: content });
+    updateNote(currentNote.id, { content: result.text });
+    setSelection(result.selection);
+    setPanel(null);
+    focusEditorAt(result.selection);
   };
 
   const applyHelperText = (next: string) => {
@@ -897,7 +907,6 @@ function AppContent() {
     { icon: FileText, label: 'Page actions', action: () => setPanel('page') },
     { icon: Search, label: 'Search in note', action: () => { setSearchText(''); setPanel('search'); } },
     { icon: PenLine, label: 'Formatting tools', action: () => setPanel('format') },
-    { icon: SlidersHorizontal, label: 'Settings', action: () => setPanel('settings') },
     { icon: Bell, label: 'Reminder', action: () => setPanel('reminder') },
     { icon: Sparkles, label: 'Smart actions', action: () => { setHelperResult(''); setPanel('smart'); } },
   ];
@@ -906,7 +915,6 @@ function AppContent() {
     : panel === 'page' ? 'Page actions'
     : panel === 'search' ? 'Find in this note'
     : panel === 'format' ? 'Writing tools'
-    : panel === 'settings' ? 'Quiet settings'
     : panel === 'reminder' ? 'Remind me'
     : panel === 'smart' ? 'Smart actions' : '';
 
