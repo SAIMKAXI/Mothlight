@@ -1,6 +1,6 @@
 # Mothlight
 
-A quiet typewriter-inspired writing space for notes and unfinished thoughts.
+A quiet typewriter-inspired writing space for notes and unfinished thoughts, with a moth-and-page identity.
 
 Mothlight is built with Expo and React Native so writing happens in a native text field: the operating-system keyboard, selection handles, paste, autocorrect, dictation and language switching remain native. The layout is tuned for tall phones, tablets and resizable foldable displays.
 
@@ -19,7 +19,16 @@ For a native Android development build, run `npx expo run:android`. For iOS, run
 - Quiet typewriter audio variations for normal keys, spaces, backspace and carriage return, plus independent sound and haptic settings.
 - Compact contextual tools for attachments, local writing suggestions, page actions, in-note search, text prefixes, undo/redo, settings, reminders and smart actions.
 - Local note storage, create/duplicate/delete, plain-text share and scheduled local notifications.
+- A three-step first-run onboarding flow, a native branded splash screen, and a reusable moth/page app mark.
+- A consistent System / Light / Dark appearance setting across the editor, library, panels, onboarding and lock screen.
+- Optional app lock using Face ID, fingerprint or the device passcode; it is an access gate, not at-rest encryption.
 - The system keyboard is never simulated; Android uses resize behavior so the editor and toolbar stay above it.
+
+## Appearance and app lock
+
+The app defaults to following the system appearance. Users can choose Light or Dark in Settings; the choice is persisted locally. First-run onboarding appears once for new installations, while existing installations with stored notes are taken directly to their library/editor.
+
+App lock is optional and delegates authentication to iOS/Android through Expo LocalAuthentication. It uses enrolled device biometrics, with system passcode fallback where supported, and does not store a separate PIN. This is an access-control screen only: notes continue to use the existing AsyncStorage store and are not encrypted at rest.
 
 ## Privacy
 

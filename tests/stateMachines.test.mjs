@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   attachmentReducer,
+  appLockReducer,
+  initialAppLockState,
+  onboardingReducer,
+  initialOnboardingState,
   bootReducer,
   helperReducer,
   deleteReducer,
@@ -151,4 +155,34 @@ test('delete confirmation requires request, confirm, and completion', () => {
   state = deleteReducer(state, { type: 'COMPLETE' });
   assert.equal(state, 'idle');
   assert.equal(deleteReducer('confirming', { type: 'CANCEL' }), 'idle');
+});
+
+test('first-run onboarding progresses, moves back, and completes', () => {
+  let state = onboardingReducer(initialOnboardingState, { type: 'START' });
+  assert.deepEqual(state, { status: 'active', step: 0 });
+  state = onboardingReducer(state, { type: 'NEXT' });
+  assert.deepEqual(state, { status: 'active', step: 1 });
+  state = onboardingReducer(state, { type: 'NEXT' });
+  assert.deepEqual(state, { status: 'active', step: 2 });
+  state = onboardingReducer(state, { type: 'BACK' });
+  assert.deepEqual(state, { status: 'active', step: 1 });
+  state = onboardingReducer(state, { type: 'SKIP' });
+  assert.deepEqual(state, { status: 'completed' });
+});
+
+test('app lock requires a native authentication result before unlocking', () => {
+  let state = appLockReducer(initialAppLockState, { type: 'STARTUP_LOCK' });
+  assert.deepEqual(state, { status: 'locked' });
+  assert.deepEqual(appLockReducer(state, { type: 'AUTH_SUCCESS' }), state);
+  state = appLockReducer(state, { type: 'AUTH_START' });
+  assert.deepEqual(state, { status: 'authenticating' });
+  state = appLockReducer(state, { type: 'AUTH_FAILED', reason: 'cancelled' });
+  assert.deepEqual(state, { status: 'failed', reason: 'cancelled' });
+  state = appLockReducer(state, { type: 'RETRY' });
+  assert.deepEqual(state, { status: 'locked' });
+  state = appLockReducer(state, { type: 'AUTH_START' });
+  state = appLockReducer(state, { type: 'AUTH_SUCCESS' });
+  assert.deepEqual(state, { status: 'unlocked' });
+  assert.deepEqual(appLockReducer(state, { type: 'LOCK' }), { status: 'locked' });
+  assert.deepEqual(appLockReducer(state, { type: 'DISABLE' }), { status: 'disabled' });
 });
