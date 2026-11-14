@@ -382,11 +382,11 @@ function AppContent() {
           dispatchAppLock({ type: 'DISABLE' });
         }
       } catch {
-        const first = makeNote();
         source = 'recovered';
         if (active) {
-          setNotes([first]);
-          setCurrentNoteId(first.id);
+          setNotes([]);
+          setCurrentNoteId(null);
+          setStoredPin(null);
           dispatchAppLock({ type: 'DISABLE' });
         }
       } finally {
@@ -989,23 +989,11 @@ function AppContent() {
             />
             <Text style={styles.brandWordmark}>mothlight</Text>
             <Text style={styles.lockTitle}>Your quiet space, kept private.</Text>
-            <Text style={styles.lockSubtitle}>
-              Unlock with the biometrics set up on this device. Your system may offer passcode fallback.
-            </Text>
-            {appLockState.status === 'failed' ? (
-              <Text style={styles.lockError}>{appLockState.reason}</Text>
-            ) : null}
-            <Pressable
-              style={[styles.lockButton, appLockState.status === 'authenticating' && styles.lockButtonDisabled]}
-              disabled={appLockState.status === 'authenticating'}
-              onPress={retryUnlock}
-            >
-              <LockKeyhole size={17} color={colors.inverseText} />
-              <Text style={styles.lockButtonText}>
-                {appLockState.status === 'authenticating' ? 'Authenticating…' : 'Unlock Mothlight'}
-              </Text>
-            </Pressable>
-            <Text style={styles.lockFootnote}>Uses Face ID or fingerprint, with system passcode fallback where supported.</Text>
+            <Text style={styles.lockSubtitle}>Enter your six-digit Mothlight PIN to continue.</Text>
+            <PinDots value={pinEntry} />
+            {pinError ? <Text style={styles.lockError}>{pinError}</Text> : null}
+            <PinKeypad disabled={pinBusy} onDigit={handlePinDigit} onBackspace={handlePinBackspace} />
+            <Text style={styles.lockFootnote}>Your PIN is stored securely on this device.</Text>
           </View>
         </SafeAreaView>
       </ThemeContext.Provider>
@@ -1022,7 +1010,7 @@ function AppContent() {
     const descriptions = [
       'A clean sheet, a little room, and a typewriter’s rhythm. Mothlight gives unfinished thoughts somewhere to land.',
       'Keep the details close. Search your notes, attach images, and set gentle reminders for thoughts worth returning to.',
-      'Choose the light that suits you. You can switch appearance any time, and add an optional device lock in Settings.',
+      'Choose the light that suits you. You can change appearance and set a private six-digit app PIN in Settings.',
     ];
     return (
       <ThemeContext.Provider value={themeContextValue}>
@@ -1098,11 +1086,140 @@ function AppContent() {
               </View>
               {step === 2 ? (
                 <Text style={styles.onboardingPrivacy}>
-                  App lock is optional and uses your device authentication. Your notes stay on this device.
+                  An optional six-digit app PIN keeps this writing space private. Your notes stay on this device.
                 </Text>
               ) : null}
             </View>
           </View>
+        </SafeAreaView>
+      </ThemeContext.Provider>
+    );
+  }
+
+  if (screen === 'settings') {
+    return (
+      <ThemeContext.Provider value={themeContextValue}>
+        <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+          <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
+          <View style={styles.settingsPage}>
+            <View style={styles.settingsPageHeader}>
+              <IconButton icon={ArrowLeft} label="Back to Home" onPress={() => setScreen('library')} />
+              <View style={styles.settingsPageTitleWrap}>
+                <Text style={styles.settingsPageTitle}>Settings</Text>
+                <Text style={styles.settingsPageSubtitle}>Make Mothlight feel like yours.</Text>
+              </View>
+              <View style={styles.settingsHeaderSpacer} />
+            </View>
+            <ScrollView contentContainerStyle={styles.settingsPageContent} keyboardShouldPersistTaps="handled">
+              <Text style={styles.settingsSection}>Appearance</Text>
+              <View style={styles.themeOptions}>
+                {([
+                  { value: 'system', label: 'System' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ] as const).map((option) => (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setSettingsValue({ themeMode: option.value })}
+                    style={[styles.themeOption, settings.themeMode === option.value && styles.themeOptionSelected]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: settings.themeMode === option.value }}
+                  >
+                    <Text style={[
+                      styles.themeOptionText,
+                      settings.themeMode === option.value && styles.themeOptionTextSelected,
+                    ]}>{option.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.settingsSection}>Writing</Text>
+              <ToggleRow
+                icon={settings.typewriterSound ? Volume2 : VolumeX}
+                title="Typewriter sound"
+                subtitle="Audible mechanical key strikes and carriage return."
+                value={settings.typewriterSound}
+                onChange={(value) => setSettingsValue({ typewriterSound: value })}
+              />
+              <ToggleRow
+                icon={Vibrate}
+                title="Haptic feedback"
+                subtitle="Optional gentle tactile feedback as you type."
+                value={settings.haptics}
+                onChange={(value) => setSettingsValue({ haptics: value })}
+              />
+
+              <Text style={[styles.settingsSection, styles.settingsSecuritySection]}>Privacy</Text>
+              <ToggleRow
+                icon={LockKeyhole}
+                title="App PIN lock"
+                subtitle="Require your own six-digit PIN when you return."
+                value={settings.appLockEnabled}
+                onChange={(value) => { void setAppLockEnabled(value); }}
+              />
+              {settings.appLockEnabled ? (
+                <Pressable style={styles.changePinButton} onPress={() => {
+                  setPinSetupDraft('');
+                  setPinEntry('');
+                  setPinError(null);
+                  setPinSetupStep('create');
+                }} accessibilityRole="button">
+                  <Text style={styles.changePinText}>Change PIN</Text>
+                  <ChevronRight size={16} color={colors.iconMuted} />
+                </Pressable>
+              ) : null}
+
+              <Text style={styles.settingsFootnote}>
+                {settingsSaveState.status === 'error'
+                  ? 'Your preferences could not be saved. They may reset when the app closes.'
+                  : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
+                    ? 'Saving your preferences…'
+                    : 'Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
+              </Text>
+              <Text style={styles.settingsSecurityFootnote}>
+                The app PIN gates access to Mothlight. Notes remain in local app storage and are not encrypted by the PIN.
+              </Text>
+            </ScrollView>
+          </View>
+
+          <Modal visible={pinSetupStep !== null} transparent animationType="fade" onRequestClose={() => {
+            setPinSetupStep(null);
+            setPinEntry('');
+            setPinSetupDraft('');
+            setPinError(null);
+          }}>
+            <View style={styles.pinModalBackdrop}>
+              <View style={styles.pinSetupCard}>
+                <View style={styles.pinSetupHeader}>
+                  <Text style={styles.pinSetupTitle}>
+                    {pinSetupStep === 'confirm' ? 'Confirm your PIN' : 'Create your PIN'}
+                  </Text>
+                  <Pressable onPress={() => {
+                    setPinSetupStep(null);
+                    setPinEntry('');
+                    setPinSetupDraft('');
+                    setPinError(null);
+                  }} accessibilityRole="button" accessibilityLabel="Cancel PIN setup">
+                    <X size={20} color={colors.iconMuted} />
+                  </Pressable>
+                </View>
+                <Text style={styles.pinSetupSubtitle}>
+                  {pinSetupStep === 'confirm' ? 'Enter the same six digits once more.' : 'Choose a six-digit PIN for this device.'}
+                </Text>
+                <PinDots value={pinEntry} />
+                {pinError ? <Text style={styles.lockError}>{pinError}</Text> : null}
+                <PinKeypad disabled={pinBusy} onDigit={handlePinDigit} onBackspace={handlePinBackspace} />
+                <Pressable style={styles.pinCancelButton} onPress={() => {
+                  setPinSetupStep(null);
+                  setPinEntry('');
+                  setPinSetupDraft('');
+                  setPinError(null);
+                }}>
+                  <Text style={styles.pinCancelText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
         </SafeAreaView>
       </ThemeContext.Provider>
     );
@@ -1119,10 +1236,16 @@ function AppContent() {
               <Text style={styles.brandWordmark}>mothlight</Text>
               <Text style={styles.librarySubtitle}>A quieter place to think.</Text>
             </View>
-            <Pressable onPress={createNote} style={styles.newNoteButton}>
-              <Plus size={18} color={colors.text} strokeWidth={1.8} />
-              <Text style={styles.newNoteLabel}>New note</Text>
-            </Pressable>
+            <View style={styles.libraryActions}>
+              <Pressable onPress={() => setScreen('settings')} style={styles.settingsHomeButton} accessibilityRole="button" accessibilityLabel="Open settings">
+                <SlidersHorizontal size={18} color={colors.icon} />
+                <Text style={styles.settingsHomeLabel}>Settings</Text>
+              </Pressable>
+              <Pressable onPress={createNote} style={styles.newNoteButton} accessibilityRole="button" accessibilityLabel="Create a new note">
+                <Plus size={18} color={colors.text} strokeWidth={1.8} />
+                <Text style={styles.newNoteLabel}>New note</Text>
+              </Pressable>
+            </View>
           </View>
           <View style={styles.libraryRule} />
           {notes.length === 0 ? (
@@ -1161,7 +1284,11 @@ function AppContent() {
     <ThemeContext.Provider value={themeContextValue}>
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar barStyle={resolvedTheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <KeyboardAvoidingView style={styles.keyboardShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.keyboardShell}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
         <View style={styles.appFrame}>
           <View style={styles.topBar}>
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
@@ -1198,21 +1325,6 @@ function AppContent() {
               accessibilityLabel="Note text editor"
             />
 
-            {currentNote?.attachments?.length ? (
-              <View style={styles.attachmentStrip}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attachmentScroll}>
-                  {currentNote.attachments.map((attachment) => (
-                    <View key={attachment.id} style={styles.attachmentItem}>
-                      <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
-                      <Pressable onPress={() => removeAttachment(attachment.id)} style={styles.attachmentRemove} accessibilityRole="button" accessibilityLabel={`Remove ${attachment.name}`}>
-                        <X size={12} color={colors.toolbarText} />
-                      </Pressable>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
             <View style={styles.glyphMeasure} pointerEvents="none" onLayout={(event) => {
               const measured = event.nativeEvent.layout.width / 12;
               if (Number.isFinite(measured) && measured > 1) setGlyphWidth(measured);
@@ -1224,6 +1336,17 @@ function AppContent() {
               <View style={styles.railShadow} />
               <View style={styles.railHighlight} />
               <Animated.View style={[styles.carriage, { transform: [{ translateX: carriageX }] }]}>
+                <Animated.View
+                  style={[
+                    styles.keyBulb,
+                    {
+                      opacity: bulbGlow,
+                      transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }],
+                    },
+                  ]}
+                >
+                  <Lightbulb size={15} color={colors.amber} fill={colors.amber} />
+                </Animated.View>
                 <Animated.View style={[styles.typebar, { transform: [{ translateY: strikeValue }] }]} />
                 <View style={styles.typebarTip} />
                 <View style={styles.carriageDots}>
@@ -1234,6 +1357,27 @@ function AppContent() {
             </View>
             <View style={styles.paperEdge} />
           </View>
+
+          {currentNote?.attachments?.length ? (
+            <View style={styles.attachmentShelf}>
+              <Text style={styles.attachmentShelfTitle}>ATTACHMENTS · {currentNote.attachments.length}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.attachmentShelfItems}>
+                {currentNote.attachments.map((attachment) => (
+                  <View key={attachment.id} style={styles.attachmentItem}>
+                    <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
+                    <Pressable
+                      onPress={() => removeAttachment(attachment.id)}
+                      style={styles.attachmentRemove}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${attachment.name}`}
+                    >
+                      <X size={12} color={colors.toolbarText} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
           <View style={[styles.toolbarDock, keyboardVisible && styles.toolbarDockKeyboard]}>
             <View style={styles.toolbarPill}>
@@ -1330,8 +1474,8 @@ function AppContent() {
             {panel === 'format' ? (
               <View>
                 <View style={styles.formatGrid}>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('· ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('# ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
@@ -1346,67 +1490,46 @@ function AppContent() {
               </View>
             ) : null}
 
-            {panel === 'settings' ? (
-              <ScrollView keyboardShouldPersistTaps="handled">
-                <Text style={styles.settingsSection}>Appearance</Text>
-                <View style={styles.themeOptions}>
-                  {([
-                    { value: 'system', label: 'System' },
-                    { value: 'light', label: 'Light' },
-                    { value: 'dark', label: 'Dark' },
-                  ] as const).map((option) => (
-                    <Pressable
-                      key={option.value}
-                      onPress={() => setSettingsValue({ themeMode: option.value })}
-                      style={[styles.themeOption, settings.themeMode === option.value && styles.themeOptionSelected]}
-                    >
-                      <Text style={[
-                        styles.themeOptionText,
-                        settings.themeMode === option.value && styles.themeOptionTextSelected,
-                      ]}>{option.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <ToggleRow
-                  icon={settings.typewriterSound ? Volume2 : VolumeX}
-                  title="Typewriter sounds"
-                  subtitle="Soft mechanical clicks while you write."
-                  value={settings.typewriterSound}
-                  onChange={(value) => setSettingsValue({ typewriterSound: value })}
-                />
-                <ToggleRow
-                  icon={Vibrate}
-                  title="System haptics"
-                  subtitle="Use gentle native touch feedback."
-                  value={settings.haptics}
-                  onChange={(value) => setSettingsValue({ haptics: value })}
-                />
-                <ToggleRow
-                  icon={LockKeyhole}
-                  title="App lock (optional)"
-                  subtitle="Require device authentication when you return."
-                  value={settings.appLockEnabled}
-                  onChange={(value) => { void setAppLockEnabled(value); }}
-                />
-                <Text style={styles.settingsFootnote}>
-                  {settingsSaveState.status === 'error'
-                    ? 'Your preferences could not be saved. They may reset when the app closes.'
-                    : settingsSaveState.status === 'dirty' || settingsSaveState.status === 'saving'
-                      ? 'Saving your preferences...'
-                      : 'Appearance follows your system choice by default. Keyboard layout, language, dictation and autocorrect are provided by your operating system.'}
-                </Text>
-                <Text style={styles.settingsSecurityFootnote}>
-                  App lock gates access to the app; it does not encrypt notes stored on this device.
-                </Text>
-              </ScrollView>
-            ) : null}
-
             {panel === 'reminder' ? (
               <View>
-                <Text style={styles.sheetIntro}>Choose when this page should find its way back to you.</Text>
-                <PanelAction icon={Bell} title="In 10 minutes" detail="A gentle nudge, soon." onPress={() => void scheduleReminder(10)} />
-                <PanelAction icon={Clock3} title="In 1 hour" detail="Return to this thought later." onPress={() => void scheduleReminder(60)} />
-                <PanelAction icon={BookOpen} title="Tomorrow" detail="Bring this page back in 24 hours." onPress={() => void scheduleReminder(1440)} />
+                <Text style={styles.sheetIntro}>Choose a quick reminder or select an exact date and time.</Text>
+                <PanelAction icon={Bell} title="In 10 minutes" detail="A gentle nudge, soon." onPress={() => scheduleReminder(10)} disabled={reminderBusy} />
+                <PanelAction icon={Clock3} title="In 1 hour" detail="Return to this thought later." onPress={() => scheduleReminder(60)} disabled={reminderBusy} />
+                <PanelAction icon={BookOpen} title="Tomorrow" detail="Bring this page back in 24 hours." onPress={() => scheduleReminder(1440)} disabled={reminderBusy} />
+                <View style={styles.customReminderSection}>
+                  <Pressable
+                    style={styles.customReminderToggle}
+                    onPress={() => setCustomReminderOpen((open) => !open)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: customReminderOpen }}
+                  >
+                    <View style={styles.customReminderText}>
+                      <Text style={styles.customReminderTitle}>Custom date and time</Text>
+                      <Text style={styles.customReminderValue}>{customReminderDate.toLocaleString()}</Text>
+                    </View>
+                    <ChevronDown size={18} color={colors.iconMuted} />
+                  </Pressable>
+                  {customReminderOpen ? (
+                    <DateTimePicker
+                      value={customReminderDate}
+                      onValueChange={(_, selectedDate) => setCustomReminderDate(selectedDate)}
+                      onDismiss={() => setCustomReminderOpen(false)}
+                      mode="datetime"
+                      presentation={Platform.OS === 'android' ? 'dialog' : 'inline'}
+                      minimumDate={new Date()}
+                      accentColor={colors.accent}
+                      themeVariant={resolvedTheme}
+                    />
+                  ) : null}
+                  <Pressable
+                    style={[styles.customReminderSchedule, reminderBusy && styles.disabledControl]}
+                    onPress={() => void scheduleReminderAt(customReminderDate)}
+                    disabled={reminderBusy}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.customReminderScheduleText}>Schedule selected time</Text>
+                  </Pressable>
+                </View>
                 {currentNote?.reminderAt ? <Text style={styles.reminderMeta}>Already set for {new Date(currentNote.reminderAt).toLocaleString()}.</Text> : null}
               </View>
             ) : null}
