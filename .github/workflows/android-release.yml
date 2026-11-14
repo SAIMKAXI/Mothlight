@@ -1,4 +1,4 @@
-name: Android Preview Build
+name: Android Test Release
 
 on:
   push:
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   build-android:
-    name: Build installable Android APK
+    name: Build optimized Android release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -82,9 +82,9 @@ jobs:
             exit 1
           fi
           echo "version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           if git ls-remote --exit-code --tags origin "refs/tags/v$PACKAGE_VERSION" >/dev/null 2>&1; then
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release tag v$PACKAGE_VERSION already exists."
+            exit 1
           fi
 
       - name: Generate Mothlight brand assets
@@ -95,40 +95,53 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Build debug-signed APK
+      - name: Build optimized release APK (ARM64)
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -Pandroid.enableMinifyInReleaseBuilds=true \
+            -Pandroid.enableShrinkResourcesInReleaseBuilds=true \
+            --no-daemon --stacktrace
 
-      - name: Prepare downloadable APK
+      - name: Verify and prepare downloadable APK
         shell: bash
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/Mothlight-v${{ steps.version.outputs.version }}-Android.apk"
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$APK"
+          cp "$APK" "dist/Mothlight-v${{ steps.version.outputs.version }}-Android-ARM64.apk"
           ls -lh dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Mothlight-v${{ steps.version.outputs.version }}-Android-APK
+          name: Mothlight-v${{ steps.version.outputs.version }}-Android-Release-ARM64
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub release
-        if: steps.version.outputs.tag_exists == 'false'
+      - name: Publish GitHub test release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: Mothlight v${{ steps.version.outputs.version }}
+          name: Mothlight v${{ steps.version.outputs.version }} — Android Test Release
           prerelease: true
           make_latest: false
           files: dist/*.apk
           fail_on_unmatched_files: true
           body: |
-            ## Mothlight Android preview
+            ## Mothlight Android test release
 
-            This release contains the installable Android APK for Mothlight v${{ steps.version.outputs.version }}.
+            This is an optimized **Release build variant** for direct sideload testing on **ARM64 Android devices**.
 
-            **Signing:** This preview APK is signed automatically with the standard Android debug certificate generated on the build runner. No custom Android release keystore or Play Store signing setup is used.
+            - R8 code shrinking and optimization enabled.
+            - Unused Android resources removed.
+            - Emulator-only and 32-bit native ABIs excluded to reduce APK size.
+            - Build verified with Android APK signature verification.
 
-            **Distribution:** Intended for direct testing and installation. This is a preview build, not a Google Play production release. Notes and settings remain stored locally on the device.
+            **Signing:** No Play Store upload key or custom release keystore is required for this preview. The generated APK is signed with the build's standard Android debug certificate so Android can install it. This is a release-variant APK, not a debug build. Because the CI runner creates that certificate, a later build may need the previous app uninstalled before installing the new one.
+
+            **Distribution:** Intended for tester sideloading, not Google Play production.
+            Notes and settings remain stored locally on the device.
