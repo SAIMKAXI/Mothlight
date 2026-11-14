@@ -82,8 +82,11 @@ jobs:
       - name: TypeScript checks
         run: npm run typecheck
 
-      - name: State-machine tests
-        run: npm run test:states
+      - name: Audit interactive control wiring
+        run: npm run audit:interactions
+
+      - name: Complete regression suite
+        run: npm run test:all
 
       - name: Validate app version
         id: version
