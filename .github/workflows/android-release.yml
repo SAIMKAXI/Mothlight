@@ -108,6 +108,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --quiet pillow
           python scripts/generate_brand_assets.py
+          python scripts/generate_typewriter_audio.py
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
