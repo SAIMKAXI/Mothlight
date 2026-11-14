@@ -168,10 +168,22 @@ export default function App() {
   const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
-  const [settings, setSettings] = useState<Settings>({ typewriterSound: true, haptics: true });
+  const [settings, setSettings] = useState<Settings>({
+    typewriterSound: true,
+    haptics: true,
+    themeMode: 'system',
+    appLockEnabled: false,
+  });
+  const systemColorScheme = useColorScheme();
+  const resolvedTheme = resolveTheme(settings.themeMode, systemColorScheme);
+  const colors = themePalettes[resolvedTheme];
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const themeContextValue = useMemo(() => ({ colors, styles }), [colors, styles]);
 
   const [bootState, dispatchBoot] = useReducer(bootReducer, initialBootState);
   const ready = bootState.status === 'ready';
+  const [onboardingState, dispatchOnboarding] = useReducer(onboardingReducer, initialOnboardingState);
+  const [appLockState, dispatchAppLock] = useReducer(appLockReducer, initialAppLockState);
   const [navigation, dispatchNavigation] = useReducer(navigationReducer, initialNavigationState);
   const screen = navigation.screen;
   const panel = navigation.panel;
@@ -231,6 +243,9 @@ export default function App() {
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const settingsRevisionRef = useRef(0);
   const settingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const appLockAttemptedRef = useRef(false);
+  const appLockInFlightRef = useRef(false);
+  const appBackgroundAtRef = useRef<number | null>(null);
   const strikeValue = useRef(new Animated.Value(0)).current;
   const carriageX = useRef(new Animated.Value(0)).current;
   const clickPlayer = useAudioPlayer(require('./assets/typewriter-key.wav'));
