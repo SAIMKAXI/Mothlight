@@ -4,6 +4,7 @@ export type ResolvedTheme = Exclude<ThemeMode, 'system'>;
 export type ThemeColors = {
   background: string;
   surface: string;
+  paperStage: string;
   text: string;
   muted: string;
   secondaryText: string;
@@ -41,6 +42,7 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
   light: {
     background: '#D4D0CD',
     surface: '#E1DEDB',
+    paperStage: '#D4D0CD',
     text: '#29272A',
     muted: '#777277',
     secondaryText: '#5F5B5E',
@@ -74,21 +76,22 @@ export const themePalettes: Record<ResolvedTheme, ThemeColors> = {
     amber: '#D6AD61',
   },
   dark: {
-    background: '#1D2121',
-    surface: '#272C2B',
+    background: '#343A3D',
+    surface: '#42494C',
+    paperStage: '#4B5356',
     text: '#EEE8DC',
     muted: '#AAA7A0',
     secondaryText: '#C7C2B8',
-    toolbar: '#373B3B',
+    toolbar: '#4B5153',
     toolbarText: '#F0EDE5',
     border: '#4B514D',
     accent: '#A9C08F',
     accentText: '#202522',
-    card: '#303635',
-    cardBorder: '#4A514E',
-    input: '#2D3331',
+    card: '#454D4F',
+    cardBorder: '#586164',
+    input: '#3D4649',
     danger: '#E0A097',
-    rail: '#0D1111',
+    rail: '#242A2C',
     railHighlight: '#6B716B',
     carriage: '#4C514D',
     carriageBorder: '#6F766D',
