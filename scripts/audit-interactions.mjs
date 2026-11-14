@@ -67,6 +67,10 @@ export function auditInteractiveBindings(sourceText) {
         counts.toggles += 1;
         requireCallback('onChange', 'setting update');
       }
+      if (tag === 'DateTimePicker') {
+        requireCallback('onValueChange', 'custom reminder date/time selection');
+        if (!attributes.has('value')) failures.push('DateTimePicker must be controlled with a value.');
+      }
       if (tag === 'TextInput') {
         counts.textInputs += 1;
         requireCallback('onChangeText', 'text input update');
