@@ -219,7 +219,7 @@ function AppContent() {
   const [settings, setSettings] = useState<Settings>({
     typewriterSound: true,
     haptics: true,
-    themeMode: 'system',
+    themeMode: 'light',
     appLockEnabled: false,
   });
   const systemColorScheme = useColorScheme();
@@ -365,7 +365,7 @@ function AppContent() {
           const themeMode: ThemeMode =
             parsedSettings.themeMode === 'light' || parsedSettings.themeMode === 'dark'
               ? parsedSettings.themeMode
-              : 'system';
+              : 'light';
           const requestedAppLock = parsedSettings.appLockEnabled === true;
           const appLockEnabled = requestedAppLock && Boolean(rawPin);
           setSettings({
@@ -1635,17 +1635,17 @@ function makeStyles(colors: ThemeColors) {
   brandWordmark: { color: colors.text, fontSize: 23, letterSpacing: 1.1, fontWeight: '500' },
   loadingCaption: { marginTop: 8, color: colors.muted, fontSize: 11, letterSpacing: 1.2 },
   keyboardShell: { flex: 1 },
-  appFrame: { flex: 1, width: '100%', maxWidth: 960, alignSelf: 'center', backgroundColor: colors.background },
-  topBar: { minHeight: 48, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  appFrame: { flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center', backgroundColor: colors.background },
+  topBar: { minHeight: 48, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.paperStage },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   counter: { color: colors.secondaryText, fontSize: 11, letterSpacing: 1.1, fontVariant: ['tabular-nums'] },
   toolButton: { width: 32, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
   toolButtonActive: { backgroundColor: colors.accent },
   disabledControl: { opacity: 0.42 },
   pressed: { transform: [{ scale: 0.92 }], opacity: 0.78 },
-  paperStage: { flex: 1, position: 'relative', backgroundColor: colors.paperStage, overflow: 'hidden' },
+  paperStage: { flex: 1, minHeight: 230, position: 'relative', backgroundColor: colors.paperStage, overflow: 'hidden' },
   editorInput: {
-    position: 'absolute', top: 22, left: 26, right: 26, bottom: 54,
+    position: 'absolute', top: 26, left: 25, right: 25, bottom: 72,
     color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27,
     letterSpacing: 0.75, padding: 0, margin: 0, includeFontPadding: false,
     textAlignVertical: 'bottom',
@@ -1658,19 +1658,19 @@ function makeStyles(colors: ThemeColors) {
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
-  railTrack: { position: 'absolute', left: 26, right: 26, bottom: 23, height: 5, justifyContent: 'center' },
+  railTrack: { position: 'absolute', left: 18, right: 18, bottom: 28, height: 6, justifyContent: 'center' },
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
-  carriage: { position: 'absolute', left: 0, top: -9, width: 58, height: 22, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  carriage: { position: 'absolute', left: 0, top: -10, width: 62, height: 24, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   keyBulb: { position: 'absolute', top: -20, left: 21, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   typebar: { position: 'absolute', bottom: 17, left: 27, height: 35, width: 2, backgroundColor: colors.typebar, transform: [{ rotate: '4deg' }] },
   typebarTip: { position: 'absolute', bottom: 49, left: 24, width: 8, height: 5, borderRadius: 2, backgroundColor: colors.typebar, transform: [{ rotate: '15deg' }] },
   carriageDots: { flexDirection: 'row', gap: 4 },
   carriageDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.amber, shadowColor: colors.amber, shadowOpacity: 0.55, shadowRadius: 2, elevation: 1 },
   paperEdge: { position: 'absolute', bottom: 0, left: 24, right: 24, height: 1, backgroundColor: colors.paperEdge, opacity: 0.55 },
-  toolbarDock: { minHeight: 64, paddingHorizontal: 14, paddingTop: 5, paddingBottom: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-  toolbarDockKeyboard: { paddingBottom: 4, minHeight: 59 },
-  toolbarPill: { height: 48, maxWidth: 900, width: '100%', borderRadius: 25, backgroundColor: colors.toolbar, borderColor: colors.border, borderWidth: 0.8, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, shadowColor: colors.shadow, shadowOpacity: 0.15, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  toolbarDock: { minHeight: 62, paddingHorizontal: 14, paddingTop: 5, paddingBottom: 7, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.paperStage },
+  toolbarDockKeyboard: { paddingBottom: 5, minHeight: 56 },
+  toolbarPill: { height: 44, maxWidth: 460, width: '100%', borderRadius: 23, backgroundColor: colors.toolbar, borderColor: colors.paperEdge, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, shadowColor: colors.shadow, shadowOpacity: 0.15, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   toolbarActions: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 2 },
   toolbarEndMark: { width: 22, alignItems: 'center', justifyContent: 'center' },
   toolbarEndDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accent, opacity: 0.85 },
