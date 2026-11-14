@@ -4,6 +4,8 @@ import {
   attachmentReducer,
   bootReducer,
   helperReducer,
+  deleteReducer,
+  shareReducer,
   keyboardReducer,
   toolbarReducer,
   historyReducer,
@@ -127,4 +129,26 @@ test('smart helper preview must be explicitly applied or discarded', () => {
   });
   assert.deepEqual(helperReducer(state, { type: 'DISCARD' }), { status: 'ready', mode: 'smart' });
   assert.deepEqual(helperReducer(state, { type: 'APPLY' }), { status: 'closed' });
+});
+
+test('share flow distinguishes completion, dismissal, and failure', () => {
+  let state = shareReducer('idle', { type: 'START' });
+  assert.equal(state, 'opening');
+  state = shareReducer(state, { type: 'DISMISSED' });
+  assert.equal(state, 'dismissed');
+  state = shareReducer(state, { type: 'START' });
+  state = shareReducer(state, { type: 'SHARED' });
+  assert.equal(state, 'shared');
+});
+
+test('delete confirmation requires request, confirm, and completion', () => {
+  let state = deleteReducer('idle', { type: 'CONFIRM' });
+  assert.equal(state, 'idle');
+  state = deleteReducer(state, { type: 'REQUEST' });
+  assert.equal(state, 'confirming');
+  state = deleteReducer(state, { type: 'CONFIRM' });
+  assert.equal(state, 'deleting');
+  state = deleteReducer(state, { type: 'COMPLETE' });
+  assert.equal(state, 'idle');
+  assert.equal(deleteReducer('confirming', { type: 'CANCEL' }), 'idle');
 });
