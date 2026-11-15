@@ -136,8 +136,8 @@ jobs:
 
           gradle_file = Path("android/app/build.gradle")
           source = gradle_file.read_text()
-          pattern = r"(buildTypes\\s*\\{\\s*release\\s*\\{[\\s\\S]*?signingConfig\\s+)signingConfigs\\.debug"
-          updated, replacements = re.subn(pattern, r"\\1signingConfigs.release", source, count=1)
+          pattern = r"(buildTypes\s*\{\s*release\s*\{[\s\S]*?signingConfig\s+)signingConfigs\.debug"
+          updated, replacements = re.subn(pattern, r"\1signingConfigs.release", source, count=1)
           if replacements != 1:
               raise SystemExit("Could not switch Android release to the persistent signing config.")
           if "MYAPP_UPLOAD_STORE_FILE" not in updated:
