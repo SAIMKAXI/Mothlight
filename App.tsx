@@ -9,7 +9,6 @@ import { useAudioPlayer } from 'expo-audio';
 import { useFonts } from '@expo-google-fonts/courier-prime/useFonts';
 import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Regular';
 import { NotoNastaliqUrdu_400Regular } from '@expo-google-fonts/noto-nastaliq-urdu/400Regular';
-import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -97,30 +96,6 @@ const makeNote = (): Note => {
     attachments: [],
   };
 };
-
-function TypewriterBulb() {
-  return (
-    <Svg width={78} height={88} viewBox="0 0 78 88">
-      <Defs>
-        <RadialGradient id="bulbGlowGradient" cx="50%" cy="43%" rx="50%" ry="50%">
-          <Stop offset="0%" stopColor="#F7C96D" stopOpacity="0.34" />
-          <Stop offset="48%" stopColor="#F7C96D" stopOpacity="0.12" />
-          <Stop offset="100%" stopColor="#F7C96D" stopOpacity="0" />
-        </RadialGradient>
-      </Defs>
-      <Ellipse cx="39" cy="37" rx="38" ry="38" fill="url(#bulbGlowGradient)" />
-      <Path
-        d="M39 9.5c-10.2 0-18.4 7.9-18.4 17.8 0 6.2 3.1 10.7 7.2 15.1 2.5 2.7 3.8 5.4 4.2 8.5h14c.4-3.1 1.7-5.8 4.2-8.5 4.1-4.4 7.2-8.9 7.2-15.1C57.4 17.4 49.2 9.5 39 9.5Z"
-        fill="#F8D98E" fillOpacity="0.96" stroke="#B77A35" strokeWidth="1.35"
-      />
-      <Path d="M32.5 51h13M33.5 55h11M34.5 59h9M35.5 63h7" stroke="#8D6541" strokeWidth="2" strokeLinecap="round" />
-      <Path d="M34 43.5 39 36l5 7.5M39 36v-7" stroke="#9D713C" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <Path d="M35 66.5h8c0 3-1.7 4.8-4 4.8s-4-1.8-4-4.8Z" fill="#A9A6A0" stroke="#6E6B66" strokeWidth="1" />
-      <Circle cx="39" cy="26" r="2.4" fill="#FFF5D5" opacity="0.9" />
-      <Path d="M23 20l-3-2M55 20l3-2M39 5V2" stroke="#F2C36B" strokeWidth="1.5" strokeLinecap="round" opacity="0.65" />
-    </Svg>
-  );
-}
 
 function IconButton({
   icon: Icon, label, onPress, size = 20, active = false, disabled = false,
@@ -548,7 +523,7 @@ function AppContent() {
     bulbGlow.stopAnimation();
     Animated.sequence([
       Animated.timing(bulbGlow, { toValue: 1, duration: 26, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(bulbGlow, { toValue: 0.24, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(bulbGlow, { toValue: 0.24, duration: 190, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
     if (typewriterState.phase === 'striking' && typewriterState.kind === 'backspace') {
       dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
@@ -1405,6 +1380,8 @@ function AppContent() {
           </View>
 
           <View style={styles.paperStage} onLayout={(event) => setStageWidth(event.nativeEvent.layout.width)}>
+            <Animated.View pointerEvents="none" style={[styles.bulbLightWash, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.035, 0.22] }) }]} />
+            <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
             {previewMode ? (
               <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewContent}>
                 {content.split('\n').map((line, index) => {
@@ -1468,9 +1445,9 @@ function AppContent() {
               <View style={styles.railShadow} />
               <View style={styles.railHighlight} />
               <Animated.View style={[styles.carriage, { transform: [{ translateX: carriageX }] }]}>
-                <Animated.View pointerEvents="none" style={[styles.bulbIllustration, { opacity: bulbGlow, transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.94, 1.04] }) }] }]}>
-                <TypewriterBulb />
-              </Animated.View>
+                <Animated.View style={[styles.keyBulb, { opacity: bulbGlow, transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }] }]}>
+                  <Lightbulb size={15} color={colors.amber} fill={colors.amber} />
+                </Animated.View>
                 <Animated.View style={[styles.typebar, { transform: [{ translateY: strikeValue }] }]} />
                 <View style={styles.typebarTip} />
                 <View style={styles.carriageDots}>
@@ -1757,11 +1734,13 @@ function makeStyles(colors: ThemeColors) {
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
-  bulbIllustration: { position: 'absolute', width: 78, height: 88, left: -8, top: -78, zIndex: 20, alignItems: 'center', justifyContent: 'center' },
+  bulbLightWash: { position: 'absolute', width: 340, height: 340, borderRadius: 170, backgroundColor: colors.amber, bottom: -142, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.95, shadowRadius: 80, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  bulbLightCore: { position: 'absolute', width: 210, height: 260, borderRadius: 130, backgroundColor: colors.amber, bottom: -82, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.9, shadowRadius: 50, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
   railTrack: { position: 'absolute', left: 18, right: 18, bottom: 28, height: 6, justifyContent: 'center' },
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
   carriage: { position: 'absolute', left: 0, top: -10, width: 62, height: 24, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  keyBulb: { position: 'absolute', top: -20, left: 21, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   typebar: { position: 'absolute', bottom: 17, left: 27, height: 35, width: 2, backgroundColor: colors.typebar, transform: [{ rotate: '4deg' }] },
   typebarTip: { position: 'absolute', bottom: 49, left: 24, width: 8, height: 5, borderRadius: 2, backgroundColor: colors.typebar, transform: [{ rotate: '15deg' }] },
   carriageDots: { flexDirection: 'row', gap: 4 },
