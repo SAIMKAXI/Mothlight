@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
+  Alert, Animated, AppState, BackHandler, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
   Platform, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput,
   View, useColorScheme,
 } from 'react-native';
@@ -24,6 +24,7 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-
 import { getNoteTitle as getTitle, normalizeNotes, type Note } from './src/noteModel';
 import { getReminderNoteId } from './src/notificationRouting';
 import { toggleLinePrefix, insertAtSelection as insertTextAtSelection } from './src/formatting';
+import { parseFormattedLine } from './src/richText';
 import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
@@ -295,6 +296,7 @@ function AppContent() {
   };
 
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [previewMode, setPreviewMode] = useState(false);
   const [stageWidth, setStageWidth] = useState(0);
   const [railWidth, setRailWidth] = useState(0);
   const [glyphWidth, setGlyphWidth] = useState(9.2);
@@ -452,6 +454,16 @@ function AppContent() {
   }, [settings, ready]);
 
   useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (panel !== null) { setPanel(null); return true; }
+      if (screen === 'editor') { Keyboard.dismiss(); setScreen('library'); return true; }
+      if (screen === 'settings') { setScreen('library'); return true; }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [panel, screen]);
+
+  useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => dispatchKeyboard({ type: 'SHOW' }));
     const hide = Keyboard.addListener('keyboardDidHide', () => dispatchKeyboard({ type: 'HIDE' }));
     return () => { show.remove(); hide.remove(); };
@@ -546,6 +558,7 @@ function AppContent() {
     const note = makeNote();
     setNotes((existing) => [note, ...existing]);
     setCurrentNoteId(note.id);
+    setPreviewMode(false);
     setSelection({ start: 0, end: 0 });
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
@@ -570,6 +583,7 @@ function AppContent() {
 
   const handleTextChange = useCallback((nextValue: string) => {
     if (!currentNote) return;
+    setPreviewMode(false);
     const next = nextValue.slice(0, MAX_CHARS);
     const kind = classifyEdit(currentNote.content, next);
     if (kind !== 'none') {
@@ -792,6 +806,7 @@ function AppContent() {
     };
     setNotes((existing) => [copy, ...existing]);
     setCurrentNoteId(copy.id);
+    setPreviewMode(false);
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
     setScreen('editor');
@@ -850,17 +865,22 @@ function AppContent() {
     }, 220);
   };
 
-  const insertAtSelection = (replacement: string) => {
+  const insertAtSelection = (replacement: string, showPreview = false) => {
     if (!currentNote) return;
     const result = insertTextAtSelection(content, selection, replacement, MAX_CHARS);
     dispatchHistory({ type: 'RECORD', value: content });
     updateNote(currentNote.id, { content: result.text });
     setSelection(result.selection);
     setPanel(null);
-    focusEditorAt(result.selection);
+    if (showPreview) {
+      Keyboard.dismiss();
+      setPreviewMode(true);
+    } else {
+      focusEditorAt(result.selection);
+    }
   };
 
-  const applyPrefix = (prefix: string) => {
+  const applyPrefix = (prefix: string, showPreview = false) => {
     if (!currentNote) return;
     const result = toggleLinePrefix(content, selection, prefix);
     if (result.text === content) return;
@@ -868,7 +888,12 @@ function AppContent() {
     updateNote(currentNote.id, { content: result.text });
     setSelection(result.selection);
     setPanel(null);
-    focusEditorAt(result.selection);
+    if (showPreview) {
+      Keyboard.dismiss();
+      setPreviewMode(true);
+    } else {
+      focusEditorAt(result.selection);
+    }
   };
 
   const undo = () => {
@@ -961,6 +986,7 @@ function AppContent() {
 
   const openNote = (noteId: string) => {
     setCurrentNoteId(noteId);
+    setPreviewMode(false);
     setSelection({ start: 0, end: 0 });
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
@@ -1299,15 +1325,17 @@ function AppContent() {
             <FlatList
               data={[...notes].sort((a, b) => b.updatedAt - a.updatedAt)}
               keyExtractor={(item) => item.id}
+              numColumns={2}
+              columnWrapperStyle={styles.noteCardRow}
               contentContainerStyle={styles.noteList}
               renderItem={({ item }) => (
-                <Pressable onPress={() => openNote(item.id)} style={({ pressed }) => [styles.noteRow, pressed && { opacity: 0.62 }]}>
-                  <View style={styles.noteRowMain}>
-                    <Text numberOfLines={1} style={styles.noteRowTitle}>{getTitle(item)}</Text>
-                    <Text numberOfLines={2} style={styles.noteRowPreview}>{item.content || 'An empty page, ready when you are.'}</Text>
-                    <Text style={styles.noteRowDate}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text>
+                <Pressable onPress={() => openNote(item.id)} style={({ pressed }) => [styles.noteCard, pressed && styles.noteCardPressed]}>
+                  <Text numberOfLines={1} style={styles.noteCardTitle}>{getTitle(item)}</Text>
+                  <Text numberOfLines={5} style={styles.noteCardPreview}>{item.content.trim() || 'A blank page, ready when you are.'}</Text>
+                  <View style={styles.noteCardFooter}>
+                    <Text style={styles.noteCardDate}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text>
+                    <ChevronRight size={14} color={colors.iconMuted} />
                   </View>
-                  <ChevronRight size={18} color={colors.iconMuted} />
                 </Pressable>
               )}
             />
@@ -1335,11 +1363,46 @@ function AppContent() {
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
             <View style={styles.topRight}>
               <Text style={styles.counter}>{content.length.toLocaleString()} / 6,000</Text>
+              <IconButton icon={previewMode ? PenLine : BookOpen} label={previewMode ? 'Edit note' : 'Preview formatted note'} onPress={() => {
+                if (previewMode) {
+                  setPreviewMode(false);
+                  focusEditorAt(selection);
+                } else {
+                  Keyboard.dismiss();
+                  setPreviewMode(true);
+                }
+              }} size={19} />
               <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} disabled={shareState === 'opening'} />
             </View>
           </View>
 
           <View style={styles.paperStage} onLayout={(event) => setStageWidth(event.nativeEvent.layout.width)}>
+            <Animated.View pointerEvents="none" style={[styles.bulbLightWash, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.035, 0.22] }) }]} />
+            <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
+            {previewMode ? (
+              <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewContent}>
+                {content.split('\n').map((line, index) => {
+                  const parsed = parseFormattedLine(line);
+                  if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
+                  if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
+                  if (parsed.kind === 'heading') return <Text key={index} style={styles.previewHeading}>{parsed.text}</Text>;
+                  if (parsed.kind === 'quote') return (
+                    <View key={index} style={styles.previewQuote}>
+                      <Text style={styles.previewQuoteText}>{parsed.text}</Text>
+                    </View>
+                  );
+                  if (parsed.kind === 'bullet') return (
+                    <View key={index} style={styles.previewBulletRow}>
+                      <Text style={styles.previewBulletMark}>•</Text>
+                      <Text style={styles.previewBody}>{parsed.text}</Text>
+                    </View>
+                  );
+                  return <Text key={index} style={styles.previewBody}>{parsed.text}</Text>;
+                })}
+                {!content.trim() ? <Text style={styles.previewEmpty}>Nothing on this page yet.</Text> : null}
+              </ScrollView>
+            ) : (
+              <>
             <TextInput
               ref={editorRef}
               style={styles.editorInput}
@@ -1372,6 +1435,8 @@ function AppContent() {
             }}>
               <Text style={styles.editorTypography}>MMMMMMMMMMMM</Text>
             </View>
+              </>
+            )}
 
             <View style={styles.railTrack} onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}>
               <View style={styles.railShadow} />
@@ -1515,10 +1580,10 @@ function AppContent() {
             {panel === 'format' ? (
               <View>
                 <View style={styles.formatGrid}>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ', true)} accessibilityRole="button"><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ', true)} accessibilityRole="button"><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ', true)} accessibilityRole="button"><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n', true)} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
                 <View style={styles.undoRow}>
                   <Pressable style={[styles.undoButton, !history.undo.length && styles.disabledControl]} onPress={undo} disabled={!history.undo.length} accessibilityRole="button">
@@ -1651,6 +1716,17 @@ function makeStyles(colors: ThemeColors) {
     textAlignVertical: 'bottom',
   },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
+  previewScroll: { position: 'absolute', top: 20, left: 24, right: 24, bottom: 72 },
+  previewContent: { paddingBottom: 24 },
+  previewHeading: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 25, lineHeight: 33, fontWeight: '700', marginBottom: 9, marginTop: 3 },
+  previewBody: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27, letterSpacing: 0.5 },
+  previewQuote: { borderLeftWidth: 3, borderLeftColor: colors.amber, paddingLeft: 12, marginVertical: 7 },
+  previewQuoteText: { color: colors.secondaryText, fontFamily: 'CourierPrime_400Regular', fontSize: 14, lineHeight: 24, fontStyle: 'italic' },
+  previewBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 2 },
+  previewBulletMark: { color: colors.accent, fontSize: 16, lineHeight: 27 },
+  previewDivider: { height: 1, backgroundColor: colors.paperEdge, marginVertical: 14, opacity: 0.8 },
+  previewSpacer: { height: 12 },
+  previewEmpty: { color: colors.muted, fontSize: 13, fontStyle: 'italic' },
   glyphMeasure: { position: 'absolute', left: -1000, top: -1000, opacity: 0 },
   attachmentShelf: { minHeight: 76, paddingHorizontal: 22, paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: colors.panelBorder, backgroundColor: colors.surface },
   attachmentShelfTitle: { color: colors.muted, fontSize: 8, letterSpacing: 1.2, marginBottom: 6 },
@@ -1658,6 +1734,8 @@ function makeStyles(colors: ThemeColors) {
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
+  bulbLightWash: { position: 'absolute', width: 340, height: 340, borderRadius: 170, backgroundColor: colors.amber, bottom: -142, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.95, shadowRadius: 80, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  bulbLightCore: { position: 'absolute', width: 210, height: 260, borderRadius: 130, backgroundColor: colors.amber, bottom: -82, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.9, shadowRadius: 50, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
   railTrack: { position: 'absolute', left: 18, right: 18, bottom: 28, height: 6, justifyContent: 'center' },
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
@@ -1728,12 +1806,14 @@ function makeStyles(colors: ThemeColors) {
   newNoteButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 18 },
   newNoteLabel: { color: colors.text, fontSize: 12 },
   libraryRule: { height: 1, backgroundColor: colors.panelBorder, opacity: 0.8 },
-  noteList: { paddingBottom: 30 },
-  noteRow: { minHeight: 104, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.panelBorder, paddingVertical: 17, gap: 12 },
-  noteRowMain: { flex: 1, gap: 5 },
-  noteRowTitle: { color: colors.text, fontSize: 15, fontWeight: '500' },
-  noteRowPreview: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  noteRowDate: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  noteList: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 30, gap: 12 },
+  noteCardRow: { gap: 12 },
+  noteCard: { flex: 1, minHeight: 158, maxWidth: '50%', padding: 13, borderRadius: 15, borderWidth: 1, borderColor: colors.panelBorder, backgroundColor: colors.surface, justifyContent: 'space-between', shadowColor: colors.shadow, shadowOpacity: 0.05, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  noteCardPressed: { opacity: 0.7, transform: [{ scale: 0.985 }] },
+  noteCardTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  noteCardPreview: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.panelBorder },
+  noteCardDate: { color: colors.muted, fontSize: 9, letterSpacing: 0.3 },
   libraryFooter: { marginTop: 'auto', paddingVertical: 13, borderTopWidth: 1, borderTopColor: colors.panelBorder },
   footerMeta: { color: colors.muted, fontSize: 10, letterSpacing: 0.4 },
   emptyLibrary: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
