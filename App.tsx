@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  Alert, Animated, AppState, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
+  Alert, Animated, AppState, BackHandler, Easing, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal,
   Platform, Pressable, ScrollView, Share, StatusBar, StyleSheet, Text, TextInput,
   View, useColorScheme,
 } from 'react-native';
@@ -450,6 +450,16 @@ function AppContent() {
         });
       });
   }, [settings, ready]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (panel !== null) { setPanel(null); return true; }
+      if (screen === 'editor') { Keyboard.dismiss(); setScreen('library'); return true; }
+      if (screen === 'settings') { setScreen('library'); return true; }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [panel, screen]);
 
   useEffect(() => {
     const show = Keyboard.addListener('keyboardDidShow', () => dispatchKeyboard({ type: 'SHOW' }));
@@ -1299,15 +1309,17 @@ function AppContent() {
             <FlatList
               data={[...notes].sort((a, b) => b.updatedAt - a.updatedAt)}
               keyExtractor={(item) => item.id}
+              numColumns={2}
+              columnWrapperStyle={styles.noteCardRow}
               contentContainerStyle={styles.noteList}
               renderItem={({ item }) => (
-                <Pressable onPress={() => openNote(item.id)} style={({ pressed }) => [styles.noteRow, pressed && { opacity: 0.62 }]}>
-                  <View style={styles.noteRowMain}>
-                    <Text numberOfLines={1} style={styles.noteRowTitle}>{getTitle(item)}</Text>
-                    <Text numberOfLines={2} style={styles.noteRowPreview}>{item.content || 'An empty page, ready when you are.'}</Text>
-                    <Text style={styles.noteRowDate}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text>
+                <Pressable onPress={() => openNote(item.id)} style={({ pressed }) => [styles.noteCard, pressed && styles.noteCardPressed]}>
+                  <Text numberOfLines={1} style={styles.noteCardTitle}>{getTitle(item)}</Text>
+                  <Text numberOfLines={5} style={styles.noteCardPreview}>{item.content.trim() || 'A blank page, ready when you are.'}</Text>
+                  <View style={styles.noteCardFooter}>
+                    <Text style={styles.noteCardDate}>{new Date(item.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text>
+                    <ChevronRight size={14} color={colors.iconMuted} />
                   </View>
-                  <ChevronRight size={18} color={colors.iconMuted} />
                 </Pressable>
               )}
             />
@@ -1340,6 +1352,8 @@ function AppContent() {
           </View>
 
           <View style={styles.paperStage} onLayout={(event) => setStageWidth(event.nativeEvent.layout.width)}>
+            <Animated.View pointerEvents="none" style={[styles.bulbLightWash, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.035, 0.22] }) }]} />
+            <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
             <TextInput
               ref={editorRef}
               style={styles.editorInput}
@@ -1658,6 +1672,8 @@ function makeStyles(colors: ThemeColors) {
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
+  bulbLightWash: { position: 'absolute', width: 340, height: 340, borderRadius: 170, backgroundColor: colors.amber, top: 12, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.95, shadowRadius: 80, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
+  bulbLightCore: { position: 'absolute', width: 210, height: 260, borderRadius: 130, backgroundColor: colors.amber, top: 35, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.9, shadowRadius: 50, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
   railTrack: { position: 'absolute', left: 18, right: 18, bottom: 28, height: 6, justifyContent: 'center' },
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
@@ -1728,12 +1744,14 @@ function makeStyles(colors: ThemeColors) {
   newNoteButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 18 },
   newNoteLabel: { color: colors.text, fontSize: 12 },
   libraryRule: { height: 1, backgroundColor: colors.panelBorder, opacity: 0.8 },
-  noteList: { paddingBottom: 30 },
-  noteRow: { minHeight: 104, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.panelBorder, paddingVertical: 17, gap: 12 },
-  noteRowMain: { flex: 1, gap: 5 },
-  noteRowTitle: { color: colors.text, fontSize: 15, fontWeight: '500' },
-  noteRowPreview: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  noteRowDate: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  noteList: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 30, gap: 12 },
+  noteCardRow: { gap: 12 },
+  noteCard: { flex: 1, minHeight: 158, maxWidth: '50%', padding: 13, borderRadius: 15, borderWidth: 1, borderColor: colors.panelBorder, backgroundColor: colors.surface, justifyContent: 'space-between', shadowColor: colors.shadow, shadowOpacity: 0.05, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
+  noteCardPressed: { opacity: 0.7, transform: [{ scale: 0.985 }] },
+  noteCardTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  noteCardPreview: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.panelBorder },
+  noteCardDate: { color: colors.muted, fontSize: 9, letterSpacing: 0.3 },
   libraryFooter: { marginTop: 'auto', paddingVertical: 13, borderTopWidth: 1, borderTopColor: colors.panelBorder },
   footerMeta: { color: colors.muted, fontSize: 10, letterSpacing: 0.4 },
   emptyLibrary: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 60 },
