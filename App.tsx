@@ -214,6 +214,20 @@ function PinDots({ value }: { value: string }) {
   );
 }
 
+function ScriptAwareText({ text, style, urduStyle }: { text: string; style: any; urduStyle: any }) {
+  const runs = text.match(/[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]+|[^\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]+/gu) ?? [text];
+  const hasUrdu = containsUrduScript(text);
+  return (
+    <Text style={[style, hasUrdu ? { textAlign: 'right', writingDirection: 'rtl' } : null]}>
+      {runs.map((run, index) => (
+        <Text key={index} style={containsUrduScript(run) ? urduStyle : { writingDirection: 'ltr' }}>
+          {run}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
 function AppContent() {
   const [fontsLoaded] = useFonts({ CourierPrime_400Regular, NotoNastaliqUrdu_400Regular });
   const insets = useSafeAreaInsets();
@@ -1388,16 +1402,16 @@ function AppContent() {
                   const parsed = parseFormattedLine(line);
                   if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
                   if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
-                  if (parsed.kind === 'heading') return <Text key={index} style={[styles.previewHeading, containsUrduScript(parsed.text) && styles.previewHeadingUrdu]}>{parsed.text}</Text>;
+                  if (parsed.kind === 'heading') return <ScriptAwareText key={index} text={parsed.text} style={styles.previewHeading} urduStyle={styles.previewHeadingUrdu} />;
                   if (parsed.kind === 'quote') return (
                     <View key={index} style={styles.previewQuote}>
-                      <Text style={[styles.previewQuoteText, containsUrduScript(parsed.text) && styles.previewQuoteTextUrdu]}>{parsed.text}</Text>
+                      <ScriptAwareText text={parsed.text} style={styles.previewQuoteText} urduStyle={styles.previewQuoteTextUrdu} />
                     </View>
                   );
                   if (parsed.kind === 'bullet') return (
                     <View key={index} style={[styles.previewBulletRow, containsUrduScript(parsed.text) && styles.previewBulletRowUrdu]}>
                       <Text style={styles.previewBulletMark}>•</Text>
-                      <Text style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>
+                      <ScriptAwareText text={parsed.text} style={styles.previewBody} urduStyle={styles.previewBodyUrdu} />
                     </View>
                   );
                   return <Text key={index} style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>;
