@@ -8,6 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer } from 'expo-audio';
 import { useFonts } from '@expo-google-fonts/courier-prime/useFonts';
 import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Regular';
+import { NotoNastaliqUrdu_400Regular } from '@expo-google-fonts/noto-nastaliq-urdu/400Regular';
+import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -16,7 +18,7 @@ import DateTimePicker from '@expo/ui/community/datetime-picker';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   ArrowLeft, Bell, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
-  Clock3, Copy, FileText, Heading2, ImagePlus, Lightbulb, List, Minus, PenLine, Plus, Quote,
+  Clock3, Copy, FileText, Heading2, ImagePlus, List, Minus, PenLine, Plus, Quote,
   Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2, LockKeyhole,
   VolumeX, Vibrate, WandSparkles, X,
 } from 'lucide-react-native';
@@ -28,6 +30,7 @@ import { parseFormattedLine } from './src/richText';
 import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
+import { containsUrduScript } from './src/urduText';
 import {
   attachmentReducer,
   bootReducer,
@@ -94,6 +97,30 @@ const makeNote = (): Note => {
     attachments: [],
   };
 };
+
+function TypewriterBulb() {
+  return (
+    <Svg width={78} height={88} viewBox="0 0 78 88">
+      <Defs>
+        <RadialGradient id="bulbGlowGradient" cx="50%" cy="43%" rx="50%" ry="50%">
+          <Stop offset="0%" stopColor="#F7C96D" stopOpacity="0.34" />
+          <Stop offset="48%" stopColor="#F7C96D" stopOpacity="0.12" />
+          <Stop offset="100%" stopColor="#F7C96D" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="39" cy="37" rx="38" ry="38" fill="url(#bulbGlowGradient)" />
+      <Path
+        d="M39 9.5c-10.2 0-18.4 7.9-18.4 17.8 0 6.2 3.1 10.7 7.2 15.1 2.5 2.7 3.8 5.4 4.2 8.5h14c.4-3.1 1.7-5.8 4.2-8.5 4.1-4.4 7.2-8.9 7.2-15.1C57.4 17.4 49.2 9.5 39 9.5Z"
+        fill="#F8D98E" fillOpacity="0.96" stroke="#B77A35" strokeWidth="1.35"
+      />
+      <Path d="M32.5 51h13M33.5 55h11M34.5 59h9M35.5 63h7" stroke="#8D6541" strokeWidth="2" strokeLinecap="round" />
+      <Path d="M34 43.5 39 36l5 7.5M39 36v-7" stroke="#9D713C" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <Path d="M35 66.5h8c0 3-1.7 4.8-4 4.8s-4-1.8-4-4.8Z" fill="#A9A6A0" stroke="#6E6B66" strokeWidth="1" />
+      <Circle cx="39" cy="26" r="2.4" fill="#FFF5D5" opacity="0.9" />
+      <Path d="M23 20l-3-2M55 20l3-2M39 5V2" stroke="#F2C36B" strokeWidth="1.5" strokeLinecap="round" opacity="0.65" />
+    </Svg>
+  );
+}
 
 function IconButton({
   icon: Icon, label, onPress, size = 20, active = false, disabled = false,
@@ -213,7 +240,7 @@ function PinDots({ value }: { value: string }) {
 }
 
 function AppContent() {
-  const [fontsLoaded] = useFonts({ CourierPrime_400Regular });
+  const [fontsLoaded] = useFonts({ CourierPrime_400Regular, NotoNastaliqUrdu_400Regular });
   const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
@@ -1377,24 +1404,22 @@ function AppContent() {
           </View>
 
           <View style={styles.paperStage} onLayout={(event) => setStageWidth(event.nativeEvent.layout.width)}>
-            <Animated.View pointerEvents="none" style={[styles.bulbLightWash, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.035, 0.22] }) }]} />
-            <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
             {previewMode ? (
               <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewContent}>
                 {content.split('\n').map((line, index) => {
                   const parsed = parseFormattedLine(line);
                   if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
                   if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
-                  if (parsed.kind === 'heading') return <Text key={index} style={styles.previewHeading}>{parsed.text}</Text>;
+                  if (parsed.kind === 'heading') return <Text key={index} style={[styles.previewHeading, containsUrduScript(parsed.text) && styles.previewHeadingUrdu]}>{parsed.text}</Text>;
                   if (parsed.kind === 'quote') return (
                     <View key={index} style={styles.previewQuote}>
-                      <Text style={styles.previewQuoteText}>{parsed.text}</Text>
+                      <Text style={[styles.previewQuoteText, containsUrduScript(parsed.text) && styles.previewQuoteTextUrdu]}>{parsed.text}</Text>
                     </View>
                   );
                   if (parsed.kind === 'bullet') return (
                     <View key={index} style={styles.previewBulletRow}>
                       <Text style={styles.previewBulletMark}>•</Text>
-                      <Text style={styles.previewBody}>{parsed.text}</Text>
+                      <Text style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>
                     </View>
                   );
                   return <Text key={index} style={styles.previewBody}>{parsed.text}</Text>;
@@ -1405,7 +1430,7 @@ function AppContent() {
               <>
             <TextInput
               ref={editorRef}
-              style={styles.editorInput}
+              style={[styles.editorInput, containsUrduScript(content) && styles.editorInputUrdu]}
               value={content}
               onChangeText={handleTextChange}
               onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
@@ -1442,17 +1467,9 @@ function AppContent() {
               <View style={styles.railShadow} />
               <View style={styles.railHighlight} />
               <Animated.View style={[styles.carriage, { transform: [{ translateX: carriageX }] }]}>
-                <Animated.View
-                  style={[
-                    styles.keyBulb,
-                    {
-                      opacity: bulbGlow,
-                      transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }],
-                    },
-                  ]}
-                >
-                  <Lightbulb size={15} color={colors.amber} fill={colors.amber} />
-                </Animated.View>
+                <Animated.View pointerEvents="none" style={[styles.bulbIllustration, { opacity: bulbGlow, transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.94, 1.04] }) }] }]}>
+                <TypewriterBulb />
+              </Animated.View>
                 <Animated.View style={[styles.typebar, { transform: [{ translateY: strikeValue }] }]} />
                 <View style={styles.typebarTip} />
                 <View style={styles.carriageDots}>
@@ -1715,13 +1732,17 @@ function makeStyles(colors: ThemeColors) {
     letterSpacing: 0.75, padding: 0, margin: 0, includeFontPadding: false,
     textAlignVertical: 'bottom',
   },
+  editorInputUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 19, lineHeight: 42, letterSpacing: 0, textAlign: 'right', writingDirection: 'rtl', includeFontPadding: true },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
   previewScroll: { position: 'absolute', top: 20, left: 24, right: 24, bottom: 72 },
   previewContent: { paddingBottom: 24 },
   previewHeading: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 25, lineHeight: 33, fontWeight: '700', marginBottom: 9, marginTop: 3 },
+  previewHeadingUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 25, lineHeight: 52, textAlign: 'right', writingDirection: 'rtl', fontWeight: '400' },
   previewBody: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27, letterSpacing: 0.5 },
+  previewBodyUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 19, lineHeight: 42, letterSpacing: 0, textAlign: 'right', writingDirection: 'rtl', includeFontPadding: true },
   previewQuote: { borderLeftWidth: 3, borderLeftColor: colors.amber, paddingLeft: 12, marginVertical: 7 },
   previewQuoteText: { color: colors.secondaryText, fontFamily: 'CourierPrime_400Regular', fontSize: 14, lineHeight: 24, fontStyle: 'italic' },
+  previewQuoteTextUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 18, lineHeight: 40, textAlign: 'right', writingDirection: 'rtl', fontStyle: 'normal' },
   previewBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 2 },
   previewBulletMark: { color: colors.accent, fontSize: 16, lineHeight: 27 },
   previewDivider: { height: 1, backgroundColor: colors.paperEdge, marginVertical: 14, opacity: 0.8 },
@@ -1734,8 +1755,7 @@ function makeStyles(colors: ThemeColors) {
   attachmentItem: { width: 56, height: 56, position: 'relative' },
   attachmentImage: { width: 56, height: 56, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   attachmentRemove: { position: 'absolute', right: -5, top: -5, height: 18, width: 18, borderRadius: 9, backgroundColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center' },
-  bulbLightWash: { position: 'absolute', width: 340, height: 340, borderRadius: 170, backgroundColor: colors.amber, bottom: -142, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.95, shadowRadius: 80, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
-  bulbLightCore: { position: 'absolute', width: 210, height: 260, borderRadius: 130, backgroundColor: colors.amber, bottom: -82, alignSelf: 'center', shadowColor: colors.amber, shadowOpacity: 0.9, shadowRadius: 50, shadowOffset: { width: 0, height: 0 }, elevation: 5 },
+  bulbIllustration: { position: 'absolute', width: 78, height: 88, left: -8, top: -78, zIndex: 20, alignItems: 'center', justifyContent: 'center' },
   railTrack: { position: 'absolute', left: 18, right: 18, bottom: 28, height: 6, justifyContent: 'center' },
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
