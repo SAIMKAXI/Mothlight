@@ -1417,12 +1417,12 @@ function AppContent() {
                     </View>
                   );
                   if (parsed.kind === 'bullet') return (
-                    <View key={index} style={styles.previewBulletRow}>
+                    <View key={index} style={[styles.previewBulletRow, containsUrduScript(parsed.text) && styles.previewBulletRowUrdu]}>
                       <Text style={styles.previewBulletMark}>•</Text>
                       <Text style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>
                     </View>
                   );
-                  return <Text key={index} style={styles.previewBody}>{parsed.text}</Text>;
+                  return <Text key={index} style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>;
                 })}
                 {!content.trim() ? <Text style={styles.previewEmpty}>Nothing on this page yet.</Text> : null}
               </ScrollView>
@@ -1744,6 +1744,7 @@ function makeStyles(colors: ThemeColors) {
   previewQuoteText: { color: colors.secondaryText, fontFamily: 'CourierPrime_400Regular', fontSize: 14, lineHeight: 24, fontStyle: 'italic' },
   previewQuoteTextUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 18, lineHeight: 40, textAlign: 'right', writingDirection: 'rtl', fontStyle: 'normal' },
   previewBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 2 },
+  previewBulletRowUrdu: { flexDirection: 'row-reverse' },
   previewBulletMark: { color: colors.accent, fontSize: 16, lineHeight: 27 },
   previewDivider: { height: 1, backgroundColor: colors.paperEdge, marginVertical: 14, opacity: 0.8 },
   previewSpacer: { height: 12 },
