@@ -1,0 +1,138 @@
+<main>
+  <nav class="nav-shell">
+    <a class="brand" href="#top" aria-label="Mothlight home">
+      <span class="brand-mark">✳</span>
+      <span>mothlight</span>
+    </a>
+    <div class="nav-links">
+      <a href="#about">The idea</a>
+      <a href="#features">Inside the app</a>
+      <a href="#privacy">Privacy</a>
+    </div>
+    <button class="nav-download" type="button" (click)="downloadLatest()">Get the app <span>↗</span></button>
+  </nav>
+
+  <section class="hero section-wrap" id="top">
+    <div class="hero-copy">
+      <div class="eyebrow"><span class="eyebrow-dot"></span> A small space for the things on your mind</div>
+      <h1>Let your thoughts<br>find a <em>quiet place.</em></h1>
+      <p class="hero-lede">A typewriter-inspired notes app for unfinished thoughts, passing ideas, and everything you don't want to lose.</p>
+      <div class="hero-actions">
+        <button class="download-button" type="button" (click)="downloadLatest()" [disabled]="downloading">
+          <span class="download-icon">↓</span>
+          <span>{{ downloading ? 'Preparing download…' : 'Download for Android' }}</span>
+          <span class="button-arrow">↗</span>
+        </button>
+        <span class="release-note">Latest build · {{ releaseVersion }}</span>
+      </div>
+      <p class="download-message" aria-live="polite">{{ downloadMessage }}</p>
+      <div class="hero-meta">
+        <span><i></i> Offline-ready writing</span>
+        <span><i></i> English + Urdu</span>
+        <span><i></i> Made for Android</span>
+      </div>
+    </div>
+    <div class="hero-art" aria-label="A softly illuminated 3D moth">
+      <div class="art-halo"></div>
+      <div class="art-orbit orbit-one"></div>
+      <div class="art-orbit orbit-two"></div>
+      <canvas #mothCanvas class="moth-canvas"></canvas>
+      <div class="art-caption"><span>01 / A little light</span><span>✳</span></div>
+      <div class="art-note">for the thoughts<br>that arrive at night.</div>
+    </div>
+    <div class="hero-bottomline"><span>DESIGNED TO FEEL LIKE PAPER</span><span>SCROLL TO EXPLORE ↓</span></div>
+  </section>
+
+  <section class="intro section-wrap" id="about">
+    <div class="section-index">01 — THE IDEA</div>
+    <div class="intro-content">
+      <p class="overline">Not another noisy productivity tool.</p>
+      <h2>Less organising.<br><em>More getting it out.</em></h2>
+      <p class="body-copy">Mothlight takes its cues from the calm of a blank page and the character of an old typewriter. Open it, make a note, and let the thought be exactly what it is. No feeds. No clutter. Just a place to write.</p>
+    </div>
+    <div class="paper-quote">
+      <span class="quote-mark">“</span>
+      <p>Some thoughts only need<br>a page to land on.</p>
+      <span class="quote-rule"></span>
+      <small>THE MOTHLIGHT WAY</small>
+    </div>
+  </section>
+
+  <section class="features section-wrap" id="features">
+    <div class="section-heading">
+      <div class="section-index">02 — INSIDE THE APP</div>
+      <div>
+        <p class="overline">Thoughtful by design</p>
+        <h2>A familiar feeling.<br><em>Useful little details.</em></h2>
+      </div>
+    </div>
+    <div class="feature-grid">
+      <article class="feature-card feature-wide">
+        <div class="feature-visual paper-visual">
+          <div class="paper-sheet">
+            <span class="paper-date">MONDAY, 08:42 PM</span>
+            <p>Maybe the best ideas<br>begin as unfinished<br><span>sentences.</span></p>
+            <span class="paper-cursor"></span>
+          </div>
+          <div class="typebar"></div>
+        </div>
+        <div class="feature-text"><span>01 / THE WRITING SPACE</span><h3>A page that feels like yours.</h3><p>Courier-style type, a quiet paper palette, mechanical touches, and a 6,000-character space for the long version of a thought.</p></div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-visual urdu-visual">
+          <div class="urdu-card"><span class="urdu-label">WRITE IN YOUR LANGUAGE</span><strong lang="ur" dir="rtl">دل کی بات</strong><span class="urdu-sub">Urdu · Nastaliq</span></div>
+        </div>
+        <div class="feature-text"><span>02 / LANGUAGE</span><h3>English, Urdu, naturally.</h3><p>Urdu text switches to bundled Nastaliq typography and right-to-left layout. The font works offline, too.</p></div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-visual library-visual">
+          <div class="mini-library">
+            <div class="library-top"><span>YOUR PAGES</span><span>•••</span></div>
+            <div class="mini-note"><b>Small beginnings</b><small>Maybe start with one line…</small></div>
+            <div class="mini-note"><b>Things to remember</b><small>Pick up the book on Friday</small></div>
+            <div class="mini-note"><b>Somewhere to go</b><small>A quiet place near the water</small></div>
+          </div>
+        </div>
+        <div class="feature-text"><span>03 / YOUR LIBRARY</span><h3>Keep the little things close.</h3><p>Find your notes in a simple library. Add images, set reminders, search, and return whenever you need to.</p></div>
+      </article>
+      <article class="feature-card">
+        <div class="feature-visual privacy-visual">
+          <div class="privacy-seal"><span>✳</span><small>ON-DEVICE<br>BY DEFAULT</small></div>
+          <div class="privacy-orbit"></div>
+        </div>
+        <div class="feature-text" id="privacy"><span>04 / PRIVACY</span><h3>Your notes stay on your device.</h3><p>Notes and settings are stored locally. No account is needed and note content is not sent to an AI service.</p></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="quiet-banner section-wrap">
+    <div class="banner-star">✳</div>
+    <p class="overline">A note to yourself</p>
+    <h2>You don't have to<br>have it all <em>figured out.</em></h2>
+    <p>Just start with a sentence.</p>
+    <button class="download-button banner-button" type="button" (click)="downloadLatest()" [disabled]="downloading">
+      <span class="download-icon">↓</span><span>Get Mothlight for Android</span><span class="button-arrow">↗</span>
+    </button>
+    <span class="release-note banner-release">{{ releaseVersion }}</span>
+  </section>
+
+  <section class="install section-wrap">
+    <div class="section-index">03 — GETTING STARTED</div>
+    <div class="install-content">
+      <p class="overline">A few seconds to your first page</p>
+      <h2>Make room<br><em>for a thought.</em></h2>
+      <div class="install-steps">
+        <div><b>01</b><p><strong>Download</strong><span>Get the latest Android APK from GitHub.</span></p></div>
+        <div><b>02</b><p><strong>Install</strong><span>Open the downloaded file. Android may ask you to allow installs from your browser.</span></p></div>
+        <div><b>03</b><p><strong>Write</strong><span>Open Mothlight and make your first note. Your pages are saved locally.</span></p></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer section-wrap">
+    <a class="brand footer-brand" href="#top"><span class="brand-mark">✳</span><span>mothlight</span></a>
+    <span>A quieter place to write.</span>
+    <a href="https://github.com/SAIMKAXI/Mothlight" target="_blank" rel="noopener">Open source on GitHub ↗</a>
+    <small>© {{ '2026' }} Mothlight. Made for the moments between everything.</small>
+  </footer>
+</main>
