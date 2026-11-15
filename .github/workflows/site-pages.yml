@@ -33,10 +33,11 @@ jobs:
       - name: Build Angular website
         working-directory: website
         run: npm run build -- --base-href "/Mothlight/"
+      # Do not ask GITHUB_TOKEN to create/enable the Pages site here:
+      # that operation requires repository administration permission.
+      # Enable Pages once in Settings -> Pages -> Source: GitHub Actions.
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v3
         with:
