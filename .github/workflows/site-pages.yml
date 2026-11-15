@@ -35,8 +35,8 @@ jobs:
         run: npm run build -- --base-href "/Mothlight/"
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
+        # GitHub Pages must be enabled once in repository Settings → Pages.
+        # The Actions token cannot create the Pages site for this repository.
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v3
         with:
