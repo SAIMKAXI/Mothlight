@@ -24,6 +24,7 @@ import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-
 import { getNoteTitle as getTitle, normalizeNotes, type Note } from './src/noteModel';
 import { getReminderNoteId } from './src/notificationRouting';
 import { toggleLinePrefix, insertAtSelection as insertTextAtSelection } from './src/formatting';
+import { parseFormattedLine } from './src/richText';
 import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
@@ -295,6 +296,7 @@ function AppContent() {
   };
 
   const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [previewMode, setPreviewMode] = useState(false);
   const [stageWidth, setStageWidth] = useState(0);
   const [railWidth, setRailWidth] = useState(0);
   const [glyphWidth, setGlyphWidth] = useState(9.2);
@@ -556,6 +558,7 @@ function AppContent() {
     const note = makeNote();
     setNotes((existing) => [note, ...existing]);
     setCurrentNoteId(note.id);
+    setPreviewMode(false);
     setSelection({ start: 0, end: 0 });
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
@@ -580,6 +583,7 @@ function AppContent() {
 
   const handleTextChange = useCallback((nextValue: string) => {
     if (!currentNote) return;
+    setPreviewMode(false);
     const next = nextValue.slice(0, MAX_CHARS);
     const kind = classifyEdit(currentNote.content, next);
     if (kind !== 'none') {
@@ -870,7 +874,7 @@ function AppContent() {
     focusEditorAt(result.selection);
   };
 
-  const applyPrefix = (prefix: string) => {
+  const applyPrefix = (prefix: string, showPreview = false) => {
     if (!currentNote) return;
     const result = toggleLinePrefix(content, selection, prefix);
     if (result.text === content) return;
@@ -878,7 +882,12 @@ function AppContent() {
     updateNote(currentNote.id, { content: result.text });
     setSelection(result.selection);
     setPanel(null);
-    focusEditorAt(result.selection);
+    if (showPreview) {
+      Keyboard.dismiss();
+      setPreviewMode(true);
+    } else {
+      focusEditorAt(result.selection);
+    }
   };
 
   const undo = () => {
@@ -954,6 +963,15 @@ function AppContent() {
 
   const toolbarActions: { icon: IconLike; label: string; action: () => void; disabled?: boolean }[] = [
     { icon: ImagePlus, label: 'Add image', action: attachImage, disabled: attachmentBusy },
+    { icon: previewMode ? PenLine : BookOpen, label: previewMode ? 'Edit note' : 'Preview formatted note', action: () => {
+      if (previewMode) {
+        setPreviewMode(false);
+        focusEditorAt(selection);
+      } else {
+        Keyboard.dismiss();
+        setPreviewMode(true);
+      }
+    } },
     { icon: Lightbulb, label: 'Writing suggestions', action: () => { setHelperResult(''); setPanel('ideas'); } },
     { icon: FileText, label: 'Page actions', action: () => setPanel('page') },
     { icon: Search, label: 'Search in note', action: () => { setSearchText(''); setPanel('search'); } },
@@ -971,6 +989,7 @@ function AppContent() {
 
   const openNote = (noteId: string) => {
     setCurrentNoteId(noteId);
+    setPreviewMode(false);
     setSelection({ start: 0, end: 0 });
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
@@ -1347,6 +1366,15 @@ function AppContent() {
             <IconButton icon={ArrowLeft} label="Back to notes" onPress={() => { Keyboard.dismiss(); setScreen('library'); }} size={21} />
             <View style={styles.topRight}>
               <Text style={styles.counter}>{content.length.toLocaleString()} / 6,000</Text>
+              <IconButton icon={previewMode ? PenLine : BookOpen} label={previewMode ? 'Edit note' : 'Preview formatted note'} onPress={() => {
+                if (previewMode) {
+                  setPreviewMode(false);
+                  focusEditorAt(selection);
+                } else {
+                  Keyboard.dismiss();
+                  setPreviewMode(true);
+                }
+              }} size={19} />
               <IconButton icon={Share2} label="Share note as text" onPress={shareNote} size={19} disabled={shareState === 'opening'} />
             </View>
           </View>
@@ -1354,6 +1382,30 @@ function AppContent() {
           <View style={styles.paperStage} onLayout={(event) => setStageWidth(event.nativeEvent.layout.width)}>
             <Animated.View pointerEvents="none" style={[styles.bulbLightWash, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.035, 0.22] }) }]} />
             <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
+            {previewMode ? (
+              <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewContent}>
+                {content.split('\\n').map((line, index) => {
+                  const parsed = parseFormattedLine(line);
+                  if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
+                  if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
+                  if (parsed.kind === 'heading') return <Text key={index} style={styles.previewHeading}>{parsed.text}</Text>;
+                  if (parsed.kind === 'quote') return (
+                    <View key={index} style={styles.previewQuote}>
+                      <Text style={styles.previewQuoteText}>{parsed.text}</Text>
+                    </View>
+                  );
+                  if (parsed.kind === 'bullet') return (
+                    <View key={index} style={styles.previewBulletRow}>
+                      <Text style={styles.previewBulletMark}>•</Text>
+                      <Text style={styles.previewBody}>{parsed.text}</Text>
+                    </View>
+                  );
+                  return <Text key={index} style={styles.previewBody}>{parsed.text}</Text>;
+                })}
+                {!content.trim() ? <Text style={styles.previewEmpty}>Nothing on this page yet.</Text> : null}
+              </ScrollView>
+            ) : (
+              <>
             <TextInput
               ref={editorRef}
               style={styles.editorInput}
@@ -1386,6 +1438,8 @@ function AppContent() {
             }}>
               <Text style={styles.editorTypography}>MMMMMMMMMMMM</Text>
             </View>
+              </>
+            )}
 
             <View style={styles.railTrack} onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}>
               <View style={styles.railShadow} />
@@ -1529,9 +1583,9 @@ function AppContent() {
             {panel === 'format' ? (
               <View>
                 <View style={styles.formatGrid}>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ')}><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ')}><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ')}><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ', true)} accessibilityRole="button"><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ', true)} accessibilityRole="button"><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ', true)} accessibilityRole="button"><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
                 <View style={styles.undoRow}>
@@ -1665,6 +1719,17 @@ function makeStyles(colors: ThemeColors) {
     textAlignVertical: 'bottom',
   },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
+  previewScroll: { position: 'absolute', top: 20, left: 24, right: 24, bottom: 72 },
+  previewContent: { paddingBottom: 24 },
+  previewHeading: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 25, lineHeight: 33, fontWeight: '700', marginBottom: 9, marginTop: 3 },
+  previewBody: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27, letterSpacing: 0.5 },
+  previewQuote: { borderLeftWidth: 3, borderLeftColor: colors.amber, paddingLeft: 12, marginVertical: 7 },
+  previewQuoteText: { color: colors.secondaryText, fontFamily: 'CourierPrime_400Regular', fontSize: 14, lineHeight: 24, fontStyle: 'italic' },
+  previewBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 2 },
+  previewBulletMark: { color: colors.accent, fontSize: 16, lineHeight: 27 },
+  previewDivider: { height: 1, backgroundColor: colors.paperEdge, marginVertical: 14, opacity: 0.8 },
+  previewSpacer: { height: 12 },
+  previewEmpty: { color: colors.muted, fontSize: 13, fontStyle: 'italic' },
   glyphMeasure: { position: 'absolute', left: -1000, top: -1000, opacity: 0 },
   attachmentShelf: { minHeight: 76, paddingHorizontal: 22, paddingTop: 7, paddingBottom: 8, borderTopWidth: 1, borderTopColor: colors.panelBorder, backgroundColor: colors.surface },
   attachmentShelfTitle: { color: colors.muted, fontSize: 8, letterSpacing: 1.2, marginBottom: 6 },
