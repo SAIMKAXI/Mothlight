@@ -113,6 +113,18 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
 
+      - name: Configure stable Mothlight test signing
+        shell: bash
+        run: |
+          mkdir -p android/app
+          base64 --decode .github/keys/mothlight-test.keystore.b64 > android/app/mothlight-test.keystore
+          cat >> android/gradle.properties <<'PROPERTIES'
+          MYAPP_UPLOAD_STORE_FILE=mothlight-test.keystore
+          MYAPP_UPLOAD_KEY_ALIAS=mothlight-test
+          MYAPP_UPLOAD_STORE_PASSWORD=mothlight-test-only
+          MYAPP_UPLOAD_KEY_PASSWORD=mothlight-test-only
+          PROPERTIES
+
       - name: Build optimized release APK (ARM64)
         working-directory: android
         run: |
@@ -128,7 +140,7 @@ jobs:
           mkdir -p dist
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs "$APK"
           cp "$APK" "dist/Mothlight-v${{ steps.version.outputs.version }}-Android-ARM64.apk"
           ls -lh dist
 
@@ -159,7 +171,7 @@ jobs:
             - Emulator-only and 32-bit native ABIs excluded to reduce APK size.
             - Build verified with Android APK signature verification.
 
-            **Signing:** No Play Store upload key or custom release keystore is required for this preview. The generated APK is signed with the build's standard Android debug certificate so Android can install it. This is a release-variant APK, not a debug build. Because the CI runner creates that certificate, a later build may need the previous app uninstalled before installing the new one.
+            **Signing:** This preview uses a stable, explicitly test-only signing certificate so future Mothlight preview APKs can install as updates. The public test key is not suitable for production or Google Play distribution. The first install after this signing change must replace older preview installs signed with the previous temporary CI key; uninstalling an older build removes its local app data, so export or otherwise back up important notes first.
 
             **Distribution:** Intended for tester sideloading, not Google Play production.
             Notes and settings remain stored locally on the device.
