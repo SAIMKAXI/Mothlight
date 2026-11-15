@@ -9,7 +9,7 @@ import { useAudioPlayer } from 'expo-audio';
 import { useFonts } from '@expo-google-fonts/courier-prime/useFonts';
 import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Regular';
 import { NotoNastaliqUrdu_400Regular } from '@expo-google-fonts/noto-nastaliq-urdu/400Regular';
-import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -18,7 +18,7 @@ import DateTimePicker from '@expo/ui/community/datetime-picker';
 import * as SplashScreen from 'expo-splash-screen';
 import {
   ArrowLeft, Bell, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp,
-  Clock3, Copy, FileText, Heading2, ImagePlus, List, Minus, PenLine, Plus, Quote,
+  Clock3, Copy, FileText, Heading2, ImagePlus, Lightbulb, List, Minus, PenLine, Plus, Quote,
   Redo2, Search, Share2, SlidersHorizontal, Sparkles, Trash2, Undo2, Volume2, LockKeyhole,
   VolumeX, Vibrate, WandSparkles, X,
 } from 'lucide-react-native';
