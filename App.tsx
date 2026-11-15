@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAudioPlayer } from 'expo-audio';
 import { useFonts } from '@expo-google-fonts/courier-prime/useFonts';
 import { CourierPrime_400Regular } from '@expo-google-fonts/courier-prime/400Regular';
+import { NotoNastaliqUrdu_400Regular } from '@expo-google-fonts/noto-nastaliq-urdu/400Regular';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
@@ -28,6 +29,7 @@ import { parseFormattedLine } from './src/richText';
 import { appendPinDigit, isValidPin, PIN_LENGTH, removePinDigit } from './src/pinInput';
 import { classifyEdit, getCursorMetrics } from './src/editorMetrics';
 import { resolveTheme, themePalettes, type ThemeColors, type ThemeMode } from './src/theme';
+import { containsUrduScript } from './src/urduText';
 import {
   attachmentReducer,
   bootReducer,
@@ -212,8 +214,22 @@ function PinDots({ value }: { value: string }) {
   );
 }
 
+function ScriptAwareText({ text, style, urduStyle }: { text: string; style: any; urduStyle: any }) {
+  const runs = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+|[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/gu) ?? [text];
+  const hasUrdu = containsUrduScript(text);
+  return (
+    <Text style={[style, hasUrdu ? { textAlign: 'right', writingDirection: 'rtl' } : null]}>
+      {runs.map((run, index) => (
+        <Text key={index} style={containsUrduScript(run) ? urduStyle : { writingDirection: 'ltr' }}>
+          {run}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
 function AppContent() {
-  const [fontsLoaded] = useFonts({ CourierPrime_400Regular });
+  const [fontsLoaded] = useFonts({ CourierPrime_400Regular, NotoNastaliqUrdu_400Regular });
   const insets = useSafeAreaInsets();
   const [notes, setNotes] = useState<Note[]>([]);
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
@@ -323,7 +339,8 @@ function AppContent() {
   const writingWidth = Math.max(80, stageWidth - 52);
   const cursor = getCursorMetrics(content, selection.start, writingWidth, glyphWidth);
   const carriageTravel = Math.max(0, railWidth - 58);
-  const targetCarriageX = carriageTravel * Math.min(1, cursor.column / Math.max(1, cursor.columns - 1));
+  const cursorProgress = Math.min(1, cursor.column / Math.max(1, cursor.columns - 1));
+  const targetCarriageX = carriageTravel * (containsUrduScript(content) ? 1 - cursorProgress : cursorProgress);
 
   useEffect(() => {
     let active = true;
@@ -1385,19 +1402,19 @@ function AppContent() {
                   const parsed = parseFormattedLine(line);
                   if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
                   if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
-                  if (parsed.kind === 'heading') return <Text key={index} style={styles.previewHeading}>{parsed.text}</Text>;
+                  if (parsed.kind === 'heading') return <ScriptAwareText key={index} text={parsed.text} style={styles.previewHeading} urduStyle={styles.previewHeadingUrdu} />;
                   if (parsed.kind === 'quote') return (
                     <View key={index} style={styles.previewQuote}>
-                      <Text style={styles.previewQuoteText}>{parsed.text}</Text>
+                      <ScriptAwareText text={parsed.text} style={styles.previewQuoteText} urduStyle={styles.previewQuoteTextUrdu} />
                     </View>
                   );
                   if (parsed.kind === 'bullet') return (
-                    <View key={index} style={styles.previewBulletRow}>
+                    <View key={index} style={[styles.previewBulletRow, containsUrduScript(parsed.text) && styles.previewBulletRowUrdu]}>
                       <Text style={styles.previewBulletMark}>•</Text>
-                      <Text style={styles.previewBody}>{parsed.text}</Text>
+                      <ScriptAwareText text={parsed.text} style={styles.previewBody} urduStyle={styles.previewBodyUrdu} />
                     </View>
                   );
-                  return <Text key={index} style={styles.previewBody}>{parsed.text}</Text>;
+                  return <Text key={index} style={[styles.previewBody, containsUrduScript(parsed.text) && styles.previewBodyUrdu]}>{parsed.text}</Text>;
                 })}
                 {!content.trim() ? <Text style={styles.previewEmpty}>Nothing on this page yet.</Text> : null}
               </ScrollView>
@@ -1405,7 +1422,7 @@ function AppContent() {
               <>
             <TextInput
               ref={editorRef}
-              style={styles.editorInput}
+              style={[styles.editorInput, containsUrduScript(content) && styles.editorInputUrdu]}
               value={content}
               onChangeText={handleTextChange}
               onSelectionChange={(event) => setSelection(event.nativeEvent.selection)}
@@ -1442,15 +1459,7 @@ function AppContent() {
               <View style={styles.railShadow} />
               <View style={styles.railHighlight} />
               <Animated.View style={[styles.carriage, { transform: [{ translateX: carriageX }] }]}>
-                <Animated.View
-                  style={[
-                    styles.keyBulb,
-                    {
-                      opacity: bulbGlow,
-                      transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }],
-                    },
-                  ]}
-                >
+                <Animated.View style={[styles.keyBulb, { opacity: bulbGlow, transform: [{ scale: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.82, 1.18] }) }] }]}>
                   <Lightbulb size={15} color={colors.amber} fill={colors.amber} />
                 </Animated.View>
                 <Animated.View style={[styles.typebar, { transform: [{ translateY: strikeValue }] }]} />
@@ -1715,14 +1724,19 @@ function makeStyles(colors: ThemeColors) {
     letterSpacing: 0.75, padding: 0, margin: 0, includeFontPadding: false,
     textAlignVertical: 'bottom',
   },
+  editorInputUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 19, lineHeight: 42, letterSpacing: 0, textAlign: 'right', writingDirection: 'rtl', includeFontPadding: true },
   editorTypography: { fontFamily: 'monospace', fontSize: 15, lineHeight: 27, letterSpacing: 0.75, includeFontPadding: false, color: colors.text },
   previewScroll: { position: 'absolute', top: 20, left: 24, right: 24, bottom: 72 },
   previewContent: { paddingBottom: 24 },
   previewHeading: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 25, lineHeight: 33, fontWeight: '700', marginBottom: 9, marginTop: 3 },
+  previewHeadingUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 25, lineHeight: 52, textAlign: 'right', writingDirection: 'rtl', fontWeight: '400' },
   previewBody: { color: colors.text, fontFamily: 'CourierPrime_400Regular', fontSize: 15, lineHeight: 27, letterSpacing: 0.5 },
+  previewBodyUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 19, lineHeight: 42, letterSpacing: 0, textAlign: 'right', writingDirection: 'rtl', includeFontPadding: true },
   previewQuote: { borderLeftWidth: 3, borderLeftColor: colors.amber, paddingLeft: 12, marginVertical: 7 },
   previewQuoteText: { color: colors.secondaryText, fontFamily: 'CourierPrime_400Regular', fontSize: 14, lineHeight: 24, fontStyle: 'italic' },
+  previewQuoteTextUrdu: { fontFamily: 'NotoNastaliqUrdu_400Regular', fontSize: 18, lineHeight: 40, textAlign: 'right', writingDirection: 'rtl', fontStyle: 'normal' },
   previewBulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 2 },
+  previewBulletRowUrdu: { flexDirection: 'row-reverse' },
   previewBulletMark: { color: colors.accent, fontSize: 16, lineHeight: 27 },
   previewDivider: { height: 1, backgroundColor: colors.paperEdge, marginVertical: 14, opacity: 0.8 },
   previewSpacer: { height: 12 },
