@@ -36,11 +36,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
   private latestApkUrl: string | null = null;
   private renderer?: THREE.WebGLRenderer;
   private scene?: THREE.Scene;
-  private camera?: THREE.PerspectiveCamera;
   private animationFrame = 0;
   private resizeObserver?: ResizeObserver;
-  private leftWing?: THREE.Mesh;
-  private rightWing?: THREE.Mesh;
   private reducedMotion = false;
 
   ngOnInit(): void {
@@ -203,10 +200,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy {
       scene.add(dust);
 
       this.scene = scene;
-      this.camera = camera;
       this.renderer = renderer;
-      this.leftWing = leftWing;
-      this.rightWing = rightWing;
 
       const resize = (): void => {
         const width = Math.max(host.clientWidth, 1);
