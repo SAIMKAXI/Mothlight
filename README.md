@@ -43,3 +43,11 @@ Paper `#D4D0CD` · secondary `#BDB9B8` · toolbar `#777477` · keyboard `#373538
 Interactive and asynchronous flows are modeled in `src/stateMachines.ts` and consumed by the app through reducers. The models define allowed transitions for startup recovery, navigation and panels, keyboard visibility, toolbar expansion, editor history, typewriter strikes, autosave revisions, image attachments, reminders, in-note search, and writing-helper previews.
 
 Pure transition tests run with `npm run test:states`. The CI workflow runs those tests in addition to Expo dependency validation and TypeScript checks. See [docs/STATE_MACHINES.md](docs/STATE_MACHINES.md) for state diagrams and invariants.
+
+## Website
+
+The Angular + Three.js landing page lives in `website/`. Run it with `cd website && npm install && npm start`. GitHub Pages deployment is configured in `.github/workflows/site-pages.yml`.
+
+## Android preview signing
+
+See [docs/ANDROID_TEST_SIGNING.md](docs/ANDROID_TEST_SIGNING.md) for the persistent test-keystore setup and the one-time v0.2.7 migration note.
