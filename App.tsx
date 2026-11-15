@@ -806,6 +806,7 @@ function AppContent() {
     };
     setNotes((existing) => [copy, ...existing]);
     setCurrentNoteId(copy.id);
+    setPreviewMode(false);
     dispatchHistory({ type: 'RESET' });
     setPanel(null);
     setScreen('editor');
@@ -864,14 +865,19 @@ function AppContent() {
     }, 220);
   };
 
-  const insertAtSelection = (replacement: string) => {
+  const insertAtSelection = (replacement: string, showPreview = false) => {
     if (!currentNote) return;
     const result = insertTextAtSelection(content, selection, replacement, MAX_CHARS);
     dispatchHistory({ type: 'RECORD', value: content });
     updateNote(currentNote.id, { content: result.text });
     setSelection(result.selection);
     setPanel(null);
-    focusEditorAt(result.selection);
+    if (showPreview) {
+      Keyboard.dismiss();
+      setPreviewMode(true);
+    } else {
+      focusEditorAt(result.selection);
+    }
   };
 
   const applyPrefix = (prefix: string, showPreview = false) => {
@@ -963,15 +969,6 @@ function AppContent() {
 
   const toolbarActions: { icon: IconLike; label: string; action: () => void; disabled?: boolean }[] = [
     { icon: ImagePlus, label: 'Add image', action: attachImage, disabled: attachmentBusy },
-    { icon: previewMode ? PenLine : BookOpen, label: previewMode ? 'Edit note' : 'Preview formatted note', action: () => {
-      if (previewMode) {
-        setPreviewMode(false);
-        focusEditorAt(selection);
-      } else {
-        Keyboard.dismiss();
-        setPreviewMode(true);
-      }
-    } },
     { icon: Lightbulb, label: 'Writing suggestions', action: () => { setHelperResult(''); setPanel('ideas'); } },
     { icon: FileText, label: 'Page actions', action: () => setPanel('page') },
     { icon: Search, label: 'Search in note', action: () => { setSearchText(''); setPanel('search'); } },
