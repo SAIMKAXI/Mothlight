@@ -3,7 +3,7 @@
     "name": "Mothlight",
     "slug": "mothlight",
     "scheme": "mothlight",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "dev.saimkazi.mothlight",
-      "versionCode": 6,
+      "versionCode": 7,
       "resizeableActivity": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
