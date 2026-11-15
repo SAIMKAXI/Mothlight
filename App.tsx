@@ -215,7 +215,7 @@ function PinDots({ value }: { value: string }) {
 }
 
 function ScriptAwareText({ text, style, urduStyle }: { text: string; style: any; urduStyle: any }) {
-  const runs = text.match(/[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]+|[^\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]+/gu) ?? [text];
+  const runs = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+|[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/gu) ?? [text];
   const hasUrdu = containsUrduScript(text);
   return (
     <Text style={[style, hasUrdu ? { textAlign: 'right', writingDirection: 'rtl' } : null]}>
