@@ -1381,7 +1381,7 @@ function AppContent() {
             <Animated.View pointerEvents="none" style={[styles.bulbLightCore, { opacity: bulbGlow.interpolate({ inputRange: [0.24, 1], outputRange: [0.015, 0.10] }) }]} />
             {previewMode ? (
               <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewContent}>
-                {content.split('\\n').map((line, index) => {
+                {content.split('\n').map((line, index) => {
                   const parsed = parseFormattedLine(line);
                   if (parsed.kind === 'empty') return <View key={index} style={styles.previewSpacer} />;
                   if (parsed.kind === 'divider') return <View key={index} style={styles.previewDivider} />;
@@ -1583,7 +1583,7 @@ function AppContent() {
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('## ', true)} accessibilityRole="button"><Heading2 size={18} color={colors.icon} /><Text style={styles.formatLabel}>Heading</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('• ', true)} accessibilityRole="button"><List size={18} color={colors.icon} /><Text style={styles.formatLabel}>Bullet</Text></Pressable>
                   <Pressable style={styles.formatButton} onPress={() => applyPrefix('> ', true)} accessibilityRole="button"><Quote size={18} color={colors.icon} /><Text style={styles.formatLabel}>Quote</Text></Pressable>
-                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n')} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
+                  <Pressable style={styles.formatButton} onPress={() => insertAtSelection('\n— — —\n', true)} accessibilityRole="button"><Minus size={18} color={colors.icon} /><Text style={styles.formatLabel}>Divider</Text></Pressable>
                 </View>
                 <View style={styles.undoRow}>
                   <Pressable style={[styles.undoButton, !history.undo.length && styles.disabledControl]} onPress={undo} disabled={!history.undo.length} accessibilityRole="button">
