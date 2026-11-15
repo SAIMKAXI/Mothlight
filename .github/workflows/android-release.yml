@@ -114,16 +114,25 @@ jobs:
         run: npx expo prebuild --platform android --no-install --clean
 
       - name: Configure stable Mothlight test signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MOTHLIGHT_TEST_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.MOTHLIGHT_TEST_KEY_PASSWORD }}
         shell: bash
         run: |
+          test -n "$KEYSTORE_BASE64" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_BASE64 repository secret."; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_PASSWORD repository secret."; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing MOTHLIGHT_TEST_KEY_ALIAS repository secret."; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing MOTHLIGHT_TEST_KEY_PASSWORD repository secret."; exit 1; }
           mkdir -p android/app
-          base64 --decode .github/keys/mothlight-test.keystore.b64 > android/app/mothlight-test.keystore
-          cat >> android/gradle.properties <<'PROPERTIES'
-          MYAPP_UPLOAD_STORE_FILE=mothlight-test.keystore
-          MYAPP_UPLOAD_KEY_ALIAS=mothlight-test
-          MYAPP_UPLOAD_STORE_PASSWORD=mothlight-test-only
-          MYAPP_UPLOAD_KEY_PASSWORD=mothlight-test-only
-          PROPERTIES
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/mothlight-test.keystore
+          {
+            echo "MYAPP_UPLOAD_STORE_FILE=mothlight-test.keystore"
+            echo "MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> android/gradle.properties
 
       - name: Build optimized release APK (ARM64)
         working-directory: android
