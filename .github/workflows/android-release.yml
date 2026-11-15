@@ -113,45 +113,6 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
 
-      - name: Configure stable Mothlight test signing
-        env:
-          KEYSTORE_BASE64: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.MOTHLIGHT_TEST_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.MOTHLIGHT_TEST_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          test -n "$KEYSTORE_BASE64" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_BASE64 repository secret."; exit 1; }
-          test -n "$KEYSTORE_PASSWORD" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_PASSWORD repository secret."; exit 1; }
-          test -n "$KEY_ALIAS" || { echo "Missing MOTHLIGHT_TEST_KEY_ALIAS repository secret."; exit 1; }
-          test -n "$KEY_PASSWORD" || { echo "Missing MOTHLIGHT_TEST_KEY_PASSWORD repository secret."; exit 1; }
-          mkdir -p android/app
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/mothlight-test.keystore
-          {
-            echo "MYAPP_UPLOAD_STORE_FILE=mothlight-test.keystore"
-            echo "MYAPP_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
-            echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD"
-            echo "MYAPP_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> android/gradle.properties
-
-      - name: Select persistent signing for release variant
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          gradle_file = Path("android/app/build.gradle")
-          source = gradle_file.read_text()
-          pattern = r"(buildTypes\s*\{\s*release\s*\{[\s\S]*?signingConfig\s+)signingConfigs\.debug"
-          updated, replacements = re.subn(pattern, r"\1signingConfigs.release", source, count=1)
-          if replacements != 1:
-              raise SystemExit("Could not switch the Android release build type to the persistent release signing config.")
-          if "MYAPP_UPLOAD_STORE_FILE" not in updated:
-              raise SystemExit("The generated Gradle file does not contain the upload-keystore configuration.")
-          gradle_file.write_text(updated)
-          print("Android release variant now uses the persistent Mothlight test keystore.")
-          PY
-
       - name: Build optimized release APK (ARM64)
         working-directory: android
         run: |
