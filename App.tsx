@@ -350,7 +350,8 @@ function AppContent() {
   const writingWidth = Math.max(80, stageWidth - 52);
   const cursor = getCursorMetrics(content, selection.start, writingWidth, glyphWidth);
   const carriageTravel = Math.max(0, railWidth - 58);
-  const targetCarriageX = carriageTravel * Math.min(1, cursor.column / Math.max(1, cursor.columns - 1));
+  const cursorProgress = Math.min(1, cursor.column / Math.max(1, cursor.columns - 1));
+  const targetCarriageX = carriageTravel * (containsUrduScript(content) ? 1 - cursorProgress : cursorProgress);
 
   useEffect(() => {
     let active = true;
@@ -547,7 +548,7 @@ function AppContent() {
     bulbGlow.stopAnimation();
     Animated.sequence([
       Animated.timing(bulbGlow, { toValue: 1, duration: 26, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(bulbGlow, { toValue: 0.24, duration: 190, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(bulbGlow, { toValue: 0.24, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
     if (typewriterState.phase === 'striking' && typewriterState.kind === 'backspace') {
       dispatchTypewriter({ type: 'ANIMATION_FINISHED', sequence });
@@ -1761,7 +1762,6 @@ function makeStyles(colors: ThemeColors) {
   railShadow: { position: 'absolute', left: 0, right: 0, height: 5, borderRadius: 3, backgroundColor: colors.rail, shadowColor: colors.shadow, shadowOpacity: 0.24, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
   railHighlight: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: colors.railHighlight, opacity: 0.7 },
   carriage: { position: 'absolute', left: 0, top: -10, width: 62, height: 24, borderRadius: 8, backgroundColor: colors.carriage, borderWidth: 1, borderColor: colors.carriageBorder, alignItems: 'center', justifyContent: 'center', shadowColor: colors.shadow, shadowOpacity: 0.22, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
-  keyBulb: { position: 'absolute', top: -20, left: 21, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' },
   typebar: { position: 'absolute', bottom: 17, left: 27, height: 35, width: 2, backgroundColor: colors.typebar, transform: [{ rotate: '4deg' }] },
   typebarTip: { position: 'absolute', bottom: 49, left: 24, width: 8, height: 5, borderRadius: 2, backgroundColor: colors.typebar, transform: [{ rotate: '15deg' }] },
   carriageDots: { flexDirection: 'row', gap: 4 },
