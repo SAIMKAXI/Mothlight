@@ -113,6 +113,39 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
 
+      - name: Configure persistent Mothlight test signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MOTHLIGHT_TEST_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_BASE64 repository secret."; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "Missing MOTHLIGHT_TEST_KEYSTORE_PASSWORD repository secret."; exit 1; }
+          mkdir -p android/app
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/mothlight-test.keystore
+          test -s android/app/mothlight-test.keystore
+          {
+            echo "MYAPP_UPLOAD_STORE_FILE=mothlight-test.keystore"
+            echo "MYAPP_UPLOAD_KEY_ALIAS=mothlight-test"
+            echo "MYAPP_UPLOAD_STORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "MYAPP_UPLOAD_KEY_PASSWORD=$KEYSTORE_PASSWORD"
+          } >> android/gradle.properties
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_file = Path("android/app/build.gradle")
+          source = gradle_file.read_text()
+          pattern = r"(buildTypes\\s*\\{\\s*release\\s*\\{[\\s\\S]*?signingConfig\\s+)signingConfigs\\.debug"
+          updated, replacements = re.subn(pattern, r"\\1signingConfigs.release", source, count=1)
+          if replacements != 1:
+              raise SystemExit("Could not switch Android release to the persistent signing config.")
+          if "MYAPP_UPLOAD_STORE_FILE" not in updated:
+              raise SystemExit("Generated Gradle file is missing upload-keystore configuration.")
+          gradle_file.write_text(updated)
+          print("Persistent test signing configured for the Android release variant.")
+          PY
+
       - name: Build optimized release APK (ARM64)
         working-directory: android
         run: |
@@ -159,7 +192,7 @@ jobs:
             - Emulator-only and 32-bit native ABIs excluded to reduce APK size.
             - Build verified with Android APK signature verification.
 
-            **Signing:** This preview uses a stable, explicitly test-only signing certificate so future Mothlight preview APKs can install as updates. The public test key is not suitable for production or Google Play distribution. The first install after this signing change must replace older preview installs signed with the previous temporary CI key; uninstalling an older build removes its local app data, so export or otherwise back up important notes first.
+            **Signing:** This preview uses the same persistent, private test-only signing key as future Mothlight preview APKs, allowing in-place updates. It is not a Google Play production key. This is a one-time signing transition from v0.2.8's temporary CI key: back up important notes, uninstall the older preview, then install v0.2.9. Uninstalling clears local app data.
 
             **Distribution:** Intended for tester sideloading, not Google Play production.
             Notes and settings remain stored locally on the device.
