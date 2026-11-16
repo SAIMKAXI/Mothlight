@@ -139,6 +139,11 @@ jobs:
           mkdir -p dist
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
+          echo "APK manifest compatibility:"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK" | grep -E "^(package:|sdkVersion:|targetSdkVersion:|native-code:)"
+          echo "Native ABI libraries:"
+          unzip -Z1 "$APK" | awk -F/ '$1 == "lib" && NF >= 3 { print $2 }' | sort -u
+          echo "APK signing certificate:"
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs "$APK"
           cp "$APK" "dist/Mothlight-v${{ steps.version.outputs.version }}-Android-ARM64.apk"
           ls -lh dist
