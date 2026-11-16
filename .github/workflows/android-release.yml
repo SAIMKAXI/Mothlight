@@ -108,7 +108,18 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --quiet pillow
           python scripts/generate_brand_assets.py
-          python scripts/generate_typewriter_audio.py
+
+      - name: Verify supplied one-stroke typewriter audio
+        run: |
+          python - <<'PY'
+          import wave
+          path = "assets/typewriter-key.wav"
+          with wave.open(path, "rb") as audio:
+              duration = audio.getnframes() / audio.getframerate()
+              if audio.getcomptype() != "NONE" or not 0 < duration <= 1.5:
+                  raise SystemExit(f"Invalid key-stroke WAV: {duration:.3f}s, {audio.getcomptype()}")
+              print(f"Using supplied key-stroke WAV: {duration:.3f}s, {audio.getframerate()} Hz, {audio.getnchannels()} channel(s), {audio.getsampwidth() * 8}-bit PCM")
+          PY
 
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install --clean
@@ -159,7 +170,7 @@ jobs:
             - Emulator-only and 32-bit native ABIs excluded to reduce APK size.
             - Build verified with Android APK signature verification.
 
-            **Signing:** This preview uses a stable, explicitly test-only signing certificate so future Mothlight preview APKs can install as updates. The public test key is not suitable for production or Google Play distribution. The first install after this signing change must replace older preview installs signed with the previous temporary CI key; uninstalling an older build removes its local app data, so export or otherwise back up important notes first.
+            **Signing:** This preview uses the standard Android debug signing certificate. No custom keystore or repository signing secret is required. This test certificate is not intended for Google Play or production distribution. Update installs require the installed app and new APK to have matching signing certificates.
 
             **Distribution:** Intended for tester sideloading, not Google Play production.
             Notes and settings remain stored locally on the device.
