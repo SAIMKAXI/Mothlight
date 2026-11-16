@@ -587,8 +587,9 @@ function AppContent() {
     if (settings.typewriterSound) {
       try {
         const player = kind === 'return' ? returnPlayer : clickPlayer;
-        player.volume = kind === 'return' ? 0.62 : kind === 'space' ? 0.38 : kind === 'backspace' ? 0.48 : 0.58;
-        player.playbackRate = kind === 'return' ? 0.92 : kind === 'space' ? 0.88 : kind === 'backspace' ? 1.18 : 1;
+        // typewriter-key.wav is one complete recorded stroke; replay it once at its natural speed.
+        player.volume = kind === 'return' ? 0.62 : 0.58;
+        player.playbackRate = 1;
         player.seekTo(0);
         player.play();
       } catch { /* Sound is optional when the device has no output route. */ }
