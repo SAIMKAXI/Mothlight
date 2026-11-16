@@ -87,8 +87,13 @@ def carriage_return() -> list[float]:
 
 def main() -> None:
     os.makedirs(ROOT, exist_ok=True)
-    write_wav(os.path.join(ROOT, "typewriter-key.wav"), 0.14, key_strike())
-    write_wav(os.path.join(ROOT, "typewriter-return.wav"), 0.22, carriage_return())
+    # Never overwrite supplied recordings. Generate synthetic fallback clips only when absent.
+    key_path = os.path.join(ROOT, "typewriter-key.wav")
+    return_path = os.path.join(ROOT, "typewriter-return.wav")
+    if not os.path.exists(key_path):
+        write_wav(key_path, 0.14, key_strike())
+    if not os.path.exists(return_path):
+        write_wav(return_path, 0.22, carriage_return())
 
 
 if __name__ == "__main__":
